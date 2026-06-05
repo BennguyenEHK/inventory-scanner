@@ -13,6 +13,27 @@ const BASE_PARAMS = {
   max_tokens: 2048,
 }
 
+function normalizeCheckpoint(raw: string, checkpoint: 1 | 2 | 3): CheckpointResult {
+  let parsed: Partial<CheckpointResult>
+  try {
+    parsed = JSON.parse(raw) as Partial<CheckpointResult>
+  } catch {
+    // Model returned non-JSON (e.g. truncated output) — treat as failed check
+    parsed = {}
+  }
+  return {
+    checkpoint:      parsed.checkpoint      ?? checkpoint,
+    passed:          parsed.passed          ?? false,
+    issues:          Array.isArray(parsed.issues) ? parsed.issues : [],
+    action:          parsed.action          ?? 'review',
+    confidence:      parsed.confidence,
+    corrections:     parsed.corrections,
+    clean_sources:   Array.isArray(parsed.clean_sources)   ? parsed.clean_sources   : undefined,
+    removed_sources: Array.isArray(parsed.removed_sources) ? parsed.removed_sources : undefined,
+    clean_count:     parsed.clean_count,
+  }
+}
+
 async function checkpoint1(vision: VisionResult): Promise<CheckpointResult> {
   const raw = await callModel({
     ...BASE_PARAMS,
@@ -24,7 +45,7 @@ async function checkpoint1(vision: VisionResult): Promise<CheckpointResult> {
       { role: 'user', content: JSON.stringify(vision) },
     ],
   })
-  return JSON.parse(raw) as CheckpointResult
+  return normalizeCheckpoint(raw, 1)
 }
 
 async function checkpoint2(productName: string, search: SearchResult): Promise<CheckpointResult> {
@@ -38,7 +59,7 @@ async function checkpoint2(productName: string, search: SearchResult): Promise<C
       { role: 'user', content: JSON.stringify({ productName, sources: search.sources }) },
     ],
   })
-  return JSON.parse(raw) as CheckpointResult
+  return normalizeCheckpoint(raw, 2)
 }
 
 async function checkpoint3(item: InventoryItem): Promise<CheckpointResult> {
@@ -52,7 +73,7 @@ async function checkpoint3(item: InventoryItem): Promise<CheckpointResult> {
       { role: 'user', content: JSON.stringify(item) },
     ],
   })
-  return JSON.parse(raw) as CheckpointResult
+  return normalizeCheckpoint(raw, 3)
 }
 
 export async function POST(request: Request): Promise<Response> {

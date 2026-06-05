@@ -98,7 +98,7 @@ export default function ScanPage() {
         Model:       vision.model_number ?? '—',
         Category:    vision.product_category,
         Description: vision.visual_description,
-        'Visible text': vision.visible_text.length > 0 ? vision.visible_text.join(', ') : '—',
+        'Visible text': (vision.visible_text?.length ?? 0) > 0 ? vision.visible_text!.join(', ') : '—',
       })
 
       if (route.route === 'C') {
@@ -118,9 +118,9 @@ export default function ScanPage() {
         setStage(2, 'done', productName, {
           Confidence: `${(prediction.prediction.prediction_confidence * 100).toFixed(0)}%`,
           Reasoning:  prediction.prediction.reasoning,
-          Candidates: prediction.candidates.map(c =>
+          Candidates: (prediction.candidates ?? []).map(c =>
             `${c.name} (${(c.confidence * 100).toFixed(0)}%) — ${c.differentiator}`
-          ).join('\n'),
+          ).join('\n') || '—',
           Query:      prediction.verification_query,
         })
       } else {
@@ -134,8 +134,8 @@ export default function ScanPage() {
         Attempts:  String(search.attempts),
         Sources:   search.sources.map(s => `${s.name}: $${s.price} (${s.unit})`).join('\n'),
         Range:     `$${search.min} – $${search.max}`,
-        Removed:   search.contaminated_removed.length > 0
-          ? search.contaminated_removed.map(s => `${s.name}: $${s.price}`).join('\n')
+        Removed:   (search.contaminated_removed?.length ?? 0) > 0
+          ? search.contaminated_removed!.map(s => `${s.name}: $${s.price}`).join('\n')
           : 'None',
       })
 
@@ -148,7 +148,7 @@ export default function ScanPage() {
       const cp2Clean = cp2.clean_sources?.length ?? search.sources.length
       setStage(4, 'done', `CP1: ${cp1.passed ? '✓' : '⚠'} · CP2: ${cp2Clean} clean sources`, {
         'CP1 result':  cp1.passed ? 'Pass ✓' : 'Fail ⚠',
-        'CP1 issues':  cp1.issues.length > 0 ? cp1.issues.join('\n') : 'None',
+        'CP1 issues':  (cp1.issues?.length ?? 0) > 0 ? cp1.issues!.join('\n') : 'None',
         'CP2 kept':    `${cp2Clean} sources`,
         'CP2 removed': cp2.removed_sources && cp2.removed_sources.length > 0
           ? cp2.removed_sources.map(s => `${s.name}: ${s.reason}`).join('\n')
