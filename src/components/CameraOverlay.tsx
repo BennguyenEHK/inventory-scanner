@@ -72,15 +72,24 @@ export default function CameraOverlay({ open, onClose, onAnalyze }: Props) {
     if (!open) {
       stopStream(mediaStream)
       setMediaStream(null)
-      setPhotos([])
+      setPhotos(prev => {
+        prev.forEach(p => {
+          // Only revoke blob: URLs (gallery files), not data: URLs (camera captures)
+          if (p.preview.startsWith('blob:')) URL.revokeObjectURL(p.preview)
+        })
+        return []
+      })
       setFallback(false)
       return
     }
 
     let active = true
+    let launchedStream: MediaStream | null = null
+
     navigator.mediaDevices?.getUserMedia({ video: { facingMode }, audio: false })
       .then(stream => {
         if (!active) { stream.getTracks().forEach(t => t.stop()); return }
+        launchedStream = stream
         setMediaStream(stream)
         setFallback(false)
         if (videoRef.current) videoRef.current.srcObject = stream
@@ -89,6 +98,7 @@ export default function CameraOverlay({ open, onClose, onAnalyze }: Props) {
 
     return () => {
       active = false
+      launchedStream?.getTracks().forEach(t => t.stop())
     }
   // mediaStream intentionally excluded — would cause loop
   // eslint-disable-next-line react-hooks/exhaustive-deps
