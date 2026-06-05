@@ -1,6 +1,10 @@
 import { callModel } from '@/lib/inference'
 import type { VisionResult, SearchResult, InventoryItem, CheckpointResult } from '@/types'
 
+// CP1 + CP2 run in parallel, each with thinking=ON and budget_tokens=6000 (~120s each).
+// Without this, Vercel's default 60s function timeout kills the request before HF responds.
+export const maxDuration = 300
+
 const BASE_PARAMS = {
   model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai' as const,
   enable_thinking: true as const,
