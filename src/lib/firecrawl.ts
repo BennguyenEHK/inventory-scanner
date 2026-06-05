@@ -72,10 +72,8 @@ export async function firecrawlExtract(
   }
 }
 
-export async function firecrawlExtractAll(
-  urls: string[],
-  options: FirecrawlExtractOptions = { schema: {} }
-): Promise<PriceSource[]> {
+// Always uses the standard price schema — that's the only purpose of this function
+export async function firecrawlExtractAll(urls: string[]): Promise<PriceSource[]> {
   const priceSchema = {
     price: 'number — the product selling price',
     currency: 'string — USD, EUR, etc.',
@@ -84,14 +82,8 @@ export async function firecrawlExtractAll(
     url: 'string — page URL',
     in_stock: 'boolean',
   }
-
-  const extractOptions = {
-    ...options,
-    schema: options.schema || priceSchema,
-  }
-
-  const promises = urls.map((url) => firecrawlExtract(url, extractOptions))
-  const results = await Promise.all(promises)
-
+  const results = await Promise.all(
+    urls.map((url) => firecrawlExtract(url, { schema: priceSchema }))
+  )
   return results.filter((result): result is PriceSource => result !== null)
 }
