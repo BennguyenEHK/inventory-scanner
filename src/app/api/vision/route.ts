@@ -1,4 +1,5 @@
 import { callModel } from '@/lib/inference'
+import { publishEvent } from '@/lib/pipeline-bus'
 import type { VisionResult, RouteDecision } from '@/types'
 
 const SYSTEM_PROMPT = `You are a product identification specialist analyzing warehouse and office inventory items.
@@ -48,8 +49,19 @@ function visionRouter(v: VisionResult): RouteDecision {
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const runId = url.searchParams.get('runId')
+
   try {
     const { images } = await request.json() as { images: string[] }
+
+    if (runId) {
+      await publishEvent(runId, {
+        kind: 'thinking',
+        stageId: 1,
+        text: `Gemini 2.5 Flash analyzing ${images.length} image${images.length !== 1 ? 's' : ''}…`,
+      })
+    }
 
     const imageContent = images.map((b64: string) => ({
       type: 'image_url',
@@ -72,6 +84,28 @@ export async function POST(request: Request): Promise<Response> {
     const vision: VisionResult = JSON.parse(raw)
     if (!vision.visual_description) vision.visual_description = 'No description available'
     const route = visionRouter(vision)
+
+    if (runId) {
+      const routeLabel = route.route === 'A'
+        ? 'Route A — high confidence, direct search'
+        : route.route === 'B'
+        ? 'Route B — moderate confidence, predict first'
+        : 'Route C — unclear image, asking user'
+
+      const lines = [
+        `Route: ${routeLabel}`,
+        `Confidence: ${(vision.confidence * 100).toFixed(0)}%`,
+        vision.brand       ? `Brand: ${vision.brand}` : 'Brand: unidentified',
+        vision.model_number ? `Model: ${vision.model_number}` : 'Model: not visible',
+        `Category: ${vision.product_category}`,
+        `Description: ${vision.visual_description}`,
+        vision.visible_text.length > 0
+          ? `Visible text: ${vision.visible_text.join(', ')}`
+          : 'Visible text: none detected',
+      ].join('\n')
+
+      await publishEvent(runId, { kind: 'thinking', stageId: 1, text: lines })
+    }
 
     return Response.json({ vision, route })
   } catch (err) {
