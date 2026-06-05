@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef } from 'react'
 import type { ChatEvent, StageStatus } from '@/types'
 
 const STATUS_COLOR: Record<StageStatus, string> = {
@@ -31,6 +32,30 @@ interface Props {
 
 const BUBBLE_BASE = 'rounded-[4px_12px_12px_4px] bg-[#0f0d1e] px-3 py-2 text-xs max-w-[92%]'
 
+// Scrollable terminal-style live feed that auto-scrolls to the latest line
+function LiveFeed({ lines, running }: { lines: string[]; running: boolean }) {
+  const bottomRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [lines.length])
+
+  return (
+    <div className="mt-2 bg-[#04030a] rounded-lg border border-[#1a1630] max-h-48 overflow-y-auto px-2.5 py-2 space-y-1.5">
+      {lines.map((line, i) => (
+        <p key={i} className="text-[9px] text-slate-400 whitespace-pre-wrap break-words leading-relaxed font-mono">
+          {line}
+        </p>
+      ))}
+      {running && (
+        <p className="text-[9px] text-[#4c3a6e] font-mono">
+          <span className="animate-pulse">▌</span>
+        </p>
+      )}
+      <div ref={bottomRef} />
+    </div>
+  )
+}
+
 export default function ChatBubble({ event, onReset }: Props) {
   if (event.kind === 'photos') {
     return (
@@ -55,6 +80,7 @@ export default function ChatBubble({ event, onReset }: Props) {
     const icon = STATUS_ICON[event.status]
     const dimmed = isDimmed(event.status)
     const entries = event.data ? Object.entries(event.data) : []
+    const liveLines = event.live ?? []
     return (
       <div className={`${BUBBLE_BASE} ${colorClass} ${dimmed ? 'opacity-40' : ''}`}>
         {/* Stage header row */}
@@ -68,7 +94,12 @@ export default function ChatBubble({ event, onReset }: Props) {
           )}
         </div>
 
-        {/* Expandable detail box — only when data is available */}
+        {/* Live telemetry feed — streams in as events arrive */}
+        {liveLines.length > 0 && (
+          <LiveFeed lines={liveLines} running={event.status === 'running'} />
+        )}
+
+        {/* Expandable detail box — populated when stage completes */}
         {entries.length > 0 && (
           <details className="mt-2 group">
             <summary className="list-none cursor-pointer select-none flex items-center gap-1 text-[#4c3a6e] text-[9px] font-medium w-fit">

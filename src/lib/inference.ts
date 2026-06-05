@@ -19,13 +19,20 @@ export function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 }
 
+// Splits raw model output into the thinking chain and the final answer
+export function extractThinking(raw: string): { thinking: string | null; text: string } {
+  const match = raw.match(/<think>([\s\S]*?)<\/think>/)
+  const thinking = match ? match[1].trim() : null
+  const text = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
+  return { thinking, text }
+}
+
 const HF_VISION_FALLBACK_MODEL = 'Qwen/Qwen2.5-VL-7B-Instruct:featherless-ai'
 
 function isGeminiModel(model: string): boolean {
   return model.startsWith('gemini-')
 }
 
-// Vision models contain "VL" or are Gemini models
 function isVisionModel(model: string): boolean {
   return model.includes('VL') || isGeminiModel(model)
 }
@@ -34,7 +41,6 @@ type GeminiPart =
   | { text: string }
   | { inlineData: { mimeType: string; data: string } }
 
-// Converts OpenAI-style message array → flat Gemini parts array
 function toGeminiParts(messages: ModelMessage[]): GeminiPart[] {
   const parts: GeminiPart[] = []
   for (const msg of messages) {
@@ -71,8 +77,8 @@ async function tryGeminiVision(
       config: {
         temperature,
         maxOutputTokens: maxTokens,
-        thinkingConfig: { thinkingBudget: 0 },  // reserve all tokens for output, not reasoning
-        responseMimeType: 'application/json',    // enforces complete valid JSON — no markdown fences
+        thinkingConfig: { thinkingBudget: 0 },
+        responseMimeType: 'application/json',
       },
     })
     return response.text ?? null
@@ -90,7 +96,7 @@ async function tryRunPodFallback(
   const url     = isVision ? process.env.RUNPOD_VISION_URL   : process.env.RUNPOD_REASONING_URL
   const rpModel = isVision ? process.env.RUNPOD_VISION_MODEL : process.env.RUNPOD_REASONING_MODEL
 
-  if (!url) return null // pod not configured — skip silently
+  if (!url) return null
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (process.env.RUNPOD_API_KEY) headers.Authorization = `Bearer ${process.env.RUNPOD_API_KEY}`
@@ -106,7 +112,8 @@ async function tryRunPodFallback(
   return data.choices?.[0]?.message.content ?? null
 }
 
-export async function callModel(params: CallModelParams): Promise<string> {
+// Internal: returns raw model output (may contain <think>…</think> blocks)
+async function getModelContent(params: CallModelParams): Promise<string> {
   const {
     model, messages,
     enable_thinking = false,
@@ -117,19 +124,13 @@ export async function callModel(params: CallModelParams): Promise<string> {
 
   const resolvedMaxTokens = enable_thinking ? budget_tokens : max_tokens
 
-  // VISION path: Gemini 2.5 Flash (primary) → HF Qwen VL (fallback) → RunPod vision pod
+  // VISION path: Gemini 2.5 Flash → HF Qwen VL → RunPod vision
   if (isGeminiModel(model)) {
     const geminiResult = await tryGeminiVision(messages, model, temperature, resolvedMaxTokens)
     if (geminiResult) return geminiResult
     console.error('[inference] Gemini failed → HF vision fallback')
 
-    // HF fallback: swap to Qwen VL (HF does not serve Gemini models)
-    const hfPayload = {
-      model: HF_VISION_FALLBACK_MODEL,
-      messages,
-      temperature,
-      max_tokens: resolvedMaxTokens,
-    }
+    const hfPayload = { model: HF_VISION_FALLBACK_MODEL, messages, temperature, max_tokens: resolvedMaxTokens }
     const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
     const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
     try {
@@ -141,25 +142,19 @@ export async function callModel(params: CallModelParams): Promise<string> {
       })
       if (!res.ok) throw new Error(`HF HTTP ${res.status}: ${res.statusText}`)
       const data = await res.json() as { choices?: { message: { content: string } }[] }
-      if (data.choices?.[0]) return stripThinking(data.choices[0].message.content)
+      if (data.choices?.[0]) return data.choices[0].message.content
       throw new Error('HF returned no choices')
     } catch (err) {
       console.error('[inference] HF vision fallback failed → RunPod:', err instanceof Error ? err.message : String(err))
     }
 
     const rpResult = await tryRunPodFallback(hfPayload, HF_VISION_FALLBACK_MODEL)
-    if (rpResult) return stripThinking(rpResult)
-
+    if (rpResult) return rpResult
     throw new Error(`Vision inference failed for model ${model} — Gemini, HF, and RunPod all unavailable`)
   }
 
-  // NON-VISION path: HF Inference Providers (primary) → RunPod fallback
-  const payload: Record<string, unknown> = {
-    model,
-    messages,
-    temperature,
-    max_tokens: resolvedMaxTokens,
-  }
+  // NON-VISION path: HF → RunPod
+  const payload: Record<string, unknown> = { model, messages, temperature, max_tokens: resolvedMaxTokens }
   if (enable_thinking) payload.chat_template_kwargs = { enable_thinking: true }
 
   const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
@@ -169,20 +164,29 @@ export async function callModel(params: CallModelParams): Promise<string> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hfToken}` },
       body: JSON.stringify(payload),
-      // Thinking-enabled calls run until the model is done — no artificial cap.
-      // Fast calls (thinking=OFF) keep the 60s safety net.
       signal: AbortSignal.timeout(enable_thinking ? 290_000 : 60_000),
     })
     if (!res.ok) throw new Error(`HF HTTP ${res.status}: ${res.statusText}`)
     const data = await res.json() as { choices?: { message: { content: string } }[] }
-    if (data.choices?.[0]) return stripThinking(data.choices[0].message.content)
+    if (data.choices?.[0]) return data.choices[0].message.content
     throw new Error('HF returned no choices')
   } catch (err) {
     console.error('[inference] HF failed → RunPod fallback:', err instanceof Error ? err.message : String(err))
   }
 
   const rpResult = await tryRunPodFallback(payload, model)
-  if (rpResult) return stripThinking(rpResult)
-
+  if (rpResult) return rpResult
   throw new Error(`Inference failed for model ${model} — both HF and RunPod unavailable`)
+}
+
+// Standard call — strips thinking before returning (backward-compatible)
+export async function callModel(params: CallModelParams): Promise<string> {
+  return stripThinking(await getModelContent(params))
+}
+
+// Returns both the cleaned answer AND the raw thinking chain
+export async function callModelWithThinking(
+  params: CallModelParams
+): Promise<{ text: string; thinking: string | null }> {
+  return extractThinking(await getModelContent(params))
 }

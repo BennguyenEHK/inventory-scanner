@@ -6,6 +6,8 @@ import CameraOverlay from '@/components/CameraOverlay'
 import CommandBar from '@/components/CommandBar'
 import ChatBubble from '@/components/ChatBubble'
 import ReportCard from '@/components/ReportCard'
+import type { BusEvent } from '@/lib/pipeline-bus'
+import { busEventToLine } from '@/lib/pipeline-bus'
 import type {
   AppState, ChatEvent, FinalReport, StageStatus,
   VisionResult, RouteDecision, PredictionResult,
@@ -19,6 +21,10 @@ const STAGE_LABELS: Record<number, string> = {
   4: 'Verification',
   5: 'Report Assembly',
   6: 'Save to Notion',
+}
+
+function apiUrl(path: string, runId: string): string {
+  return `${path}?runId=${encodeURIComponent(runId)}`
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
@@ -41,10 +47,35 @@ export default function ScanPage() {
   const [report, setReport] = useState<FinalReport | null>(null)
   const [saving, setSaving] = useState(false)
   const streamEndRef = useRef<HTMLDivElement>(null)
+  const runIdRef = useRef<string>('')
+  const esRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
     streamEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [stream.length])
+
+  const appendLive = (stageId: number, line: string) => {
+    setStream(prev => prev.map(e =>
+      e.kind === 'stage' && e.stageId === stageId
+        ? { ...e, live: [...(e.live ?? []), line] }
+        : e
+    ))
+  }
+
+  const openEventSource = (runId: string) => {
+    esRef.current?.close()
+    const es = new EventSource(`/api/pipeline/events?runId=${encodeURIComponent(runId)}`)
+    es.onmessage = (evt) => {
+      try {
+        const event = JSON.parse(evt.data) as BusEvent
+        if (event.kind === 'done') { es.close(); return }
+        const mapped = busEventToLine(event)
+        if (mapped) appendLive(mapped.stageId, mapped.line)
+      } catch { /* malformed — skip */ }
+    }
+    es.onerror = () => es.close()
+    esRef.current = es
+  }
 
   const appendEvent = (event: ChatEvent) =>
     setStream(prev => [...prev, event])
@@ -72,16 +103,24 @@ export default function ScanPage() {
   }
 
   const reset = () => {
+    esRef.current?.close()
     setStream([])
     setAppState('capture')
     setReport(null)
     setCameraOpen(false)
+    runIdRef.current = ''
   }
 
   const runPipeline = async (capturedPhotos: { base64: string; preview: string }[]) => {
     if (capturedPhotos.length === 0) return
     const base64s = capturedPhotos.map(p => p.base64)
     const previews = capturedPhotos.map(p => p.preview)
+
+    // Fresh runId per scan — opens the SSE channel before any API call
+    const runId = crypto.randomUUID()
+    runIdRef.current = runId
+    openEventSource(runId)
+
     setAppState('running')
     appendEvent({ id: 'photos', kind: 'photos', previews })
 
@@ -89,21 +128,22 @@ export default function ScanPage() {
       // Stage 1 — Vision
       setStage(1, 'running', 'Analyzing images…')
       const { vision, route } = await post<{ vision: VisionResult; route: RouteDecision }>(
-        '/api/vision', { images: base64s }
+        apiUrl('/api/vision', runId), { images: base64s }
       )
       setStage(1, 'done', `${vision.brand ?? vision.product_category} · ${(vision.confidence * 100).toFixed(0)}% conf`, {
-        Route:       route.route === 'A' ? 'A — direct search' : route.route === 'B' ? 'B — predict first' : 'C — unclear',
-        Confidence:  `${(vision.confidence * 100).toFixed(0)}%`,
-        Brand:       vision.brand ?? '—',
-        Model:       vision.model_number ?? '—',
-        Category:    vision.product_category,
-        Description: vision.visual_description,
+        Route:         route.route === 'A' ? 'A — direct search' : route.route === 'B' ? 'B — predict first' : 'C — unclear',
+        Confidence:    `${(vision.confidence * 100).toFixed(0)}%`,
+        Brand:         vision.brand ?? '—',
+        Model:         vision.model_number ?? '—',
+        Category:      vision.product_category,
+        Description:   vision.visual_description,
         'Visible text': (vision.visible_text?.length ?? 0) > 0 ? vision.visible_text!.join(', ') : '—',
       })
 
       if (route.route === 'C') {
         appendEvent({ id: `clarification-${Date.now()}`, kind: 'clarification', message: route.message ?? 'Image unclear — please retake.' })
         setAppState('capture')
+        esRef.current?.close()
         return
       }
 
@@ -112,7 +152,7 @@ export default function ScanPage() {
       let prediction: PredictionResult | null = null
       if (route.route === 'B') {
         setStage(2, 'running', 'Predicting product…')
-        const predRes = await post<{ prediction: PredictionResult }>('/api/predict', vision)
+        const predRes = await post<{ prediction: PredictionResult }>(apiUrl('/api/predict', runId), vision)
         prediction = predRes.prediction
         productName = predRes.prediction.prediction.product_name
         setStage(2, 'done', productName, {
@@ -121,7 +161,7 @@ export default function ScanPage() {
           Candidates: (prediction.candidates ?? []).map(c =>
             `${c.name} (${(c.confidence * 100).toFixed(0)}%) — ${c.differentiator}`
           ).join('\n') || '—',
-          Query:      prediction.verification_query,
+          Query: prediction.verification_query,
         })
       } else {
         setStage(2, 'skipped', 'Skipped — high confidence')
@@ -129,12 +169,12 @@ export default function ScanPage() {
 
       // Stage 3 — Price Search
       setStage(3, 'running', 'Searching prices…')
-      const search = await post<SearchResult>('/api/search', { productName })
+      const search = await post<SearchResult>(apiUrl('/api/search', runId), { productName })
       setStage(3, 'done', `${search.sources.length} sources · avg $${search.avg}`, {
-        Attempts:  String(search.attempts),
-        Sources:   search.sources.map(s => `${s.name}: $${s.price} (${s.unit})`).join('\n'),
-        Range:     `$${search.min} – $${search.max}`,
-        Removed:   (search.contaminated_removed?.length ?? 0) > 0
+        Attempts: String(search.attempts),
+        Sources:  search.sources.map(s => `${s.name}: $${s.price} (${s.unit})`).join('\n'),
+        Range:    `$${search.min} – $${search.max}`,
+        Removed:  (search.contaminated_removed?.length ?? 0) > 0
           ? search.contaminated_removed!.map(s => `${s.name}: $${s.price}`).join('\n')
           : 'None',
       })
@@ -142,8 +182,8 @@ export default function ScanPage() {
       // Stage 4 — Verification
       setStage(4, 'running', 'Verifying…')
       const [cp1, cp2] = await Promise.all([
-        post<CheckpointResult>('/api/verify', { checkpoint: 1, vision }),
-        post<CheckpointResult>('/api/verify', { checkpoint: 2, productName, search }),
+        post<CheckpointResult>(apiUrl('/api/verify', runId), { checkpoint: 1, vision }),
+        post<CheckpointResult>(apiUrl('/api/verify', runId), { checkpoint: 2, productName, search }),
       ])
       const cp2Clean = cp2.clean_sources?.length ?? search.sources.length
       setStage(4, 'done', `CP1: ${cp1.passed ? '✓' : '⚠'} · CP2: ${cp2Clean} clean sources`, {
@@ -175,11 +215,13 @@ export default function ScanPage() {
       ))
       appendEvent({ id: `error-${Date.now()}`, kind: 'error', message })
       setAppState('capture')
+    } finally {
+      esRef.current?.close()
     }
   }
 
   const handleSave = async (qty: number) => {
-    if (!report || appState === 'saved') return  // prevent double-save
+    if (!report || appState === 'saved') return
     setSaving(true)
     setStage(6, 'running', `Saving qty ${qty}…`)
     try {
@@ -268,7 +310,6 @@ export default function ScanPage() {
       <main className="w-full pt-14 pb-[72px] min-h-screen">
         <div className="flex flex-col gap-3 px-4 pt-4">
 
-          {/* Empty state */}
           {stream.length === 0 && (
             <div className="flex flex-col items-center justify-center py-24 gap-4">
               <div className="w-16 h-16 rounded-2xl bg-[#0f0d1e] border border-[#2d1f50] flex items-center justify-center">
@@ -282,7 +323,6 @@ export default function ScanPage() {
             </div>
           )}
 
-          {/* Event stream */}
           {stream.map(event => {
             if (event.kind === 'report') {
               return (

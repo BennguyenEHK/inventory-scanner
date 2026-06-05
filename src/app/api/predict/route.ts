@@ -1,4 +1,5 @@
-import { callModel } from '@/lib/inference'
+import { callModelWithThinking } from '@/lib/inference'
+import { publishEvent } from '@/lib/pipeline-bus'
 import { tavilySearch } from '@/lib/tavily'
 import type { VisionResult, PredictionResult } from '@/types'
 
@@ -15,6 +16,9 @@ Given partial product information (manufacturer name, visual description, dimens
 Be clinical and precise. Return JSON only after your reasoning.`
 
 export async function POST(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const runId = url.searchParams.get('runId')
+
   try {
     const vision: VisionResult = await request.json()
 
@@ -29,7 +33,7 @@ export async function POST(request: Request): Promise<Response> {
       barcode: vision.barcode,
     }
 
-    const raw = await callModel({
+    const { text, thinking } = await callModelWithThinking({
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
@@ -40,9 +44,12 @@ export async function POST(request: Request): Promise<Response> {
       temperature: 0.2,
     })
 
-    const prediction: PredictionResult = JSON.parse(raw)
+    if (runId && thinking) {
+      await publishEvent(runId, { kind: 'thinking', stageId: 2, text: thinking })
+    }
 
-    // Verify with Tavily — prefer barcode lookup when available
+    const prediction: PredictionResult = JSON.parse(text)
+
     const query = vision.barcode
       ? `barcode ${vision.barcode} product`
       : prediction.verification_query

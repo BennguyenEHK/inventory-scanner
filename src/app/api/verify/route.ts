@@ -1,8 +1,7 @@
-import { callModel } from '@/lib/inference'
+import { callModelWithThinking } from '@/lib/inference'
+import { publishEvent } from '@/lib/pipeline-bus'
 import type { VisionResult, SearchResult, InventoryItem, CheckpointResult } from '@/types'
 
-// CP1 + CP2 run in parallel, each with thinking=ON and budget_tokens=6000 (~120s each).
-// Without this, Vercel's default 60s function timeout kills the request before HF responds.
 export const maxDuration = 300
 
 const BASE_PARAMS = {
@@ -13,12 +12,11 @@ const BASE_PARAMS = {
   max_tokens: 2048,
 }
 
-function normalizeCheckpoint(raw: string, checkpoint: 1 | 2 | 3): CheckpointResult {
+function normalizeCheckpoint(text: string, checkpoint: 1 | 2 | 3): CheckpointResult {
   let parsed: Partial<CheckpointResult>
   try {
-    parsed = JSON.parse(raw) as Partial<CheckpointResult>
+    parsed = JSON.parse(text) as Partial<CheckpointResult>
   } catch {
-    // Model returned non-JSON (e.g. truncated output) — treat as failed check
     parsed = {}
   }
   return {
@@ -34,8 +32,8 @@ function normalizeCheckpoint(raw: string, checkpoint: 1 | 2 | 3): CheckpointResu
   }
 }
 
-async function checkpoint1(vision: VisionResult): Promise<CheckpointResult> {
-  const raw = await callModel({
+async function checkpoint1(vision: VisionResult, runId: string | null): Promise<CheckpointResult> {
+  const { text, thinking } = await callModelWithThinking({
     ...BASE_PARAMS,
     messages: [
       {
@@ -45,11 +43,14 @@ async function checkpoint1(vision: VisionResult): Promise<CheckpointResult> {
       { role: 'user', content: JSON.stringify(vision) },
     ],
   })
-  return normalizeCheckpoint(raw, 1)
+  if (runId && thinking) {
+    await publishEvent(runId, { kind: 'thinking', stageId: 4, cp: 1, text: thinking })
+  }
+  return normalizeCheckpoint(text, 1)
 }
 
-async function checkpoint2(productName: string, search: SearchResult): Promise<CheckpointResult> {
-  const raw = await callModel({
+async function checkpoint2(productName: string, search: SearchResult, runId: string | null): Promise<CheckpointResult> {
+  const { text, thinking } = await callModelWithThinking({
     ...BASE_PARAMS,
     messages: [
       {
@@ -59,11 +60,14 @@ async function checkpoint2(productName: string, search: SearchResult): Promise<C
       { role: 'user', content: JSON.stringify({ productName, sources: search.sources }) },
     ],
   })
-  return normalizeCheckpoint(raw, 2)
+  if (runId && thinking) {
+    await publishEvent(runId, { kind: 'thinking', stageId: 4, cp: 2, text: thinking })
+  }
+  return normalizeCheckpoint(text, 2)
 }
 
-async function checkpoint3(item: InventoryItem): Promise<CheckpointResult> {
-  const raw = await callModel({
+async function checkpoint3(item: InventoryItem, runId: string | null): Promise<CheckpointResult> {
+  const { text, thinking } = await callModelWithThinking({
     ...BASE_PARAMS,
     messages: [
       {
@@ -73,10 +77,16 @@ async function checkpoint3(item: InventoryItem): Promise<CheckpointResult> {
       { role: 'user', content: JSON.stringify(item) },
     ],
   })
-  return normalizeCheckpoint(raw, 3)
+  if (runId && thinking) {
+    await publishEvent(runId, { kind: 'thinking', stageId: 4, cp: undefined, text: thinking })
+  }
+  return normalizeCheckpoint(text, 3)
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const runId = url.searchParams.get('runId')
+
   try {
     const body = await request.json() as {
       checkpoint: 1 | 2 | 3
@@ -88,11 +98,11 @@ export async function POST(request: Request): Promise<Response> {
 
     let result: CheckpointResult
     if (body.checkpoint === 1 && body.vision)
-      result = await checkpoint1(body.vision)
+      result = await checkpoint1(body.vision, runId)
     else if (body.checkpoint === 2 && body.productName && body.search)
-      result = await checkpoint2(body.productName, body.search)
+      result = await checkpoint2(body.productName, body.search, runId)
     else if (body.checkpoint === 3 && body.item)
-      result = await checkpoint3(body.item)
+      result = await checkpoint3(body.item, runId)
     else
       return Response.json({ error: 'Invalid checkpoint request' }, { status: 400 })
 

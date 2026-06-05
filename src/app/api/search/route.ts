@@ -1,4 +1,5 @@
 import { callModel } from '@/lib/inference'
+import { publishEvent } from '@/lib/pipeline-bus'
 import { tavilySearch } from '@/lib/tavily'
 import { firecrawlExtractAll } from '@/lib/firecrawl'
 import type { PriceSource, SearchResult } from '@/types'
@@ -11,7 +12,6 @@ function deduplicate(prices: PriceSource[]): PriceSource[] {
   for (const p of prices) {
     const domain = new URL(p.url).hostname
     const existing = seen.get(domain)
-    // Keep lower price when same domain appears twice
     if (!existing || p.price < existing.price) seen.set(domain, p)
   }
   return Array.from(seen.values())
@@ -43,9 +43,11 @@ function removeOutliers(prices: PriceSource[]): { clean: PriceSource[]; removed:
   return { clean, removed }
 }
 
-// ReAct sufficiency check — Qwen3.6 (thinking=OFF, fast mode) verifies prices
-// are for the correct product, not just that we have enough of them
-async function isSufficient(productName: string, prices: PriceSource[]): Promise<boolean> {
+async function isSufficient(
+  productName: string,
+  prices: PriceSource[],
+  runId: string | null
+): Promise<boolean> {
   if (prices.length < TARGET_SOURCES) return false
   const uniqueDomains = new Set(prices.map(p => new URL(p.url).hostname)).size
   if (uniqueDomains < 3) return false
@@ -53,7 +55,7 @@ async function isSufficient(productName: string, prices: PriceSource[]): Promise
   try {
     const raw = await callModel({
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
-      enable_thinking: false, // fast mode for loop decisions
+      enable_thinking: false,
       temperature: 0.1,
       max_tokens: 256,
       messages: [{
@@ -62,33 +64,63 @@ async function isSufficient(productName: string, prices: PriceSource[]): Promise
 Prices: ${prices.map(p => `${p.name}: $${p.price} (${p.unit})`).join(', ')}`,
       }],
     })
-    const result = JSON.parse(raw) as { sufficient: boolean }
+    const result = JSON.parse(raw) as { sufficient: boolean; reason?: string }
+    if (runId) {
+      await publishEvent(runId, {
+        kind: 'search_sufficient',
+        sufficient: result.sufficient === true,
+        reason: result.reason,
+      })
+    }
     return result.sufficient === true
   } catch {
-    // If model call fails, fall back to count-only check
     return prices.length >= TARGET_SOURCES
   }
 }
 
 export async function POST(request: Request): Promise<Response> {
+  const url = new URL(request.url)
+  const runId = url.searchParams.get('runId')
+
   try {
     const { productName } = await request.json() as { productName: string }
     let prices: PriceSource[] = []
     let attempt = 0
 
     while (attempt < MAX_ATTEMPTS) {
-      // THINK — generate query based on what source types we still need
       const query = generateQuery(productName, attempt, prices)
 
-      // ACT — search for URLs
-      const urls = await tavilySearch(query, 8)
+      // Publish the query being used
+      if (runId) {
+        await publishEvent(runId, { kind: 'search_query', attempt: attempt + 1, query })
+      }
 
-      // ACT — scrape all URLs in parallel (never sequential)
+      // Search for URLs
+      const urls = await tavilySearch(query, 8)
+      if (runId) {
+        await publishEvent(runId, {
+          kind: 'search_tavily',
+          count: urls.length,
+          urls: urls.map(r => r.url),
+        })
+      }
+
+      // Scrape all URLs
+      if (runId) {
+        await publishEvent(runId, { kind: 'search_firecrawl', urlCount: urls.length })
+      }
       const scraped = await firecrawlExtractAll(urls.map(r => r.url))
       prices = deduplicate([...prices, ...scraped])
 
-      // OBSERVE + THINK — AI sufficiency check (semantic, not just count)
-      const sufficient = await isSufficient(productName, prices)
+      if (runId) {
+        await publishEvent(runId, {
+          kind: 'search_prices',
+          newCount: scraped.length,
+          totalCount: prices.length,
+        })
+      }
+
+      const sufficient = await isSufficient(productName, prices, runId)
       if (sufficient) break
 
       attempt++
