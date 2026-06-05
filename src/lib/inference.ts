@@ -1,3 +1,5 @@
+import { GoogleGenAI } from '@google/genai'
+
 export interface ModelMessage {
   role: 'system' | 'user' | 'assistant'
   content: string | { type: string; [key: string]: unknown }[]
@@ -17,7 +19,6 @@ export function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 }
 
-const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai'
 const HF_VISION_FALLBACK_MODEL = 'Qwen/Qwen2.5-VL-7B-Instruct:featherless-ai'
 
 function isGeminiModel(model: string): boolean {
@@ -29,20 +30,47 @@ function isVisionModel(model: string): boolean {
   return model.includes('VL') || isGeminiModel(model)
 }
 
-async function tryGeminiVision(payload: Record<string, unknown>): Promise<string | null> {
+type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } }
+
+// Converts OpenAI-style message array → flat Gemini parts array
+function toGeminiParts(messages: ModelMessage[]): GeminiPart[] {
+  const parts: GeminiPart[] = []
+  for (const msg of messages) {
+    if (typeof msg.content === 'string') {
+      parts.push({ text: msg.content })
+    } else {
+      for (const part of msg.content) {
+        if (part.type === 'text') {
+          parts.push({ text: part.text as string })
+        } else if (part.type === 'image_url') {
+          const url = (part.image_url as { url: string }).url
+          const match = url.match(/^data:([^;]+);base64,(.+)$/)
+          if (match) parts.push({ inlineData: { mimeType: match[1], data: match[2] } })
+        }
+      }
+    }
+  }
+  return parts
+}
+
+async function tryGeminiVision(
+  messages: ModelMessage[],
+  model: string,
+  temperature: number,
+  maxTokens: number,
+): Promise<string | null> {
   const apiKey = process.env.GEMINI_KEYS
   if (!apiKey) return null
   try {
-    const res = await fetch(`${GEMINI_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(60_000),
+    const ai = new GoogleGenAI({ apiKey })
+    const response = await ai.models.generateContent({
+      model,
+      contents: toGeminiParts(messages),
+      config: { temperature, maxOutputTokens: maxTokens },
     })
-    if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${res.statusText}`)
-    const data = await res.json() as { choices?: { message: { content: string } }[] }
-    if (data.choices?.[0]) return data.choices[0].message.content
-    throw new Error('Gemini returned no choices')
+    return response.text ?? null
   } catch (err) {
     console.error('[inference] Gemini failed:', err instanceof Error ? err.message : String(err))
     return null
@@ -54,8 +82,8 @@ async function tryRunPodFallback(
   model: string
 ): Promise<string | null> {
   const isVision = isVisionModel(model)
-  const url    = isVision ? process.env.RUNPOD_VISION_URL    : process.env.RUNPOD_REASONING_URL
-  const rpModel = isVision ? process.env.RUNPOD_VISION_MODEL  : process.env.RUNPOD_REASONING_MODEL
+  const url     = isVision ? process.env.RUNPOD_VISION_URL   : process.env.RUNPOD_REASONING_URL
+  const rpModel = isVision ? process.env.RUNPOD_VISION_MODEL : process.env.RUNPOD_REASONING_MODEL
 
   if (!url) return null // pod not configured — skip silently
 
@@ -82,24 +110,21 @@ export async function callModel(params: CallModelParams): Promise<string> {
     max_tokens = 1024,
   } = params
 
-  const payload: Record<string, unknown> = {
-    model,
-    messages,
-    temperature,
-    max_tokens: enable_thinking ? budget_tokens : max_tokens,
-  }
-  if (enable_thinking) {
-    payload.chat_template_kwargs = { enable_thinking: true }
-  }
+  const resolvedMaxTokens = enable_thinking ? budget_tokens : max_tokens
 
   // VISION path: Gemini 2.5 Flash (primary) → HF Qwen VL (fallback) → RunPod vision pod
   if (isGeminiModel(model)) {
-    const geminiResult = await tryGeminiVision(payload)
+    const geminiResult = await tryGeminiVision(messages, model, temperature, resolvedMaxTokens)
     if (geminiResult) return geminiResult
     console.error('[inference] Gemini failed → HF vision fallback')
 
-    // HF fallback uses Qwen VL since HF does not serve Gemini models
-    const hfPayload = { ...payload, model: HF_VISION_FALLBACK_MODEL }
+    // HF fallback: swap to Qwen VL (HF does not serve Gemini models)
+    const hfPayload = {
+      model: HF_VISION_FALLBACK_MODEL,
+      messages,
+      temperature,
+      max_tokens: resolvedMaxTokens,
+    }
     const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
     const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
     try {
@@ -117,13 +142,21 @@ export async function callModel(params: CallModelParams): Promise<string> {
       console.error('[inference] HF vision fallback failed → RunPod:', err instanceof Error ? err.message : String(err))
     }
 
-    const rpResult = await tryRunPodFallback(payload, HF_VISION_FALLBACK_MODEL)
+    const rpResult = await tryRunPodFallback(hfPayload, HF_VISION_FALLBACK_MODEL)
     if (rpResult) return stripThinking(rpResult)
 
     throw new Error(`Vision inference failed for model ${model} — Gemini, HF, and RunPod all unavailable`)
   }
 
   // NON-VISION path: HF Inference Providers (primary) → RunPod fallback
+  const payload: Record<string, unknown> = {
+    model,
+    messages,
+    temperature,
+    max_tokens: resolvedMaxTokens,
+  }
+  if (enable_thinking) payload.chat_template_kwargs = { enable_thinking: true }
+
   const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
   const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
   try {
@@ -141,7 +174,6 @@ export async function callModel(params: CallModelParams): Promise<string> {
     console.error('[inference] HF failed → RunPod fallback:', err instanceof Error ? err.message : String(err))
   }
 
-  // FALLBACK: RunPod — vision pod or reasoning pod depending on model type
   const rpResult = await tryRunPodFallback(payload, model)
   if (rpResult) return stripThinking(rpResult)
 
