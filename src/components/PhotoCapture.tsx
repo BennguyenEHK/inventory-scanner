@@ -2,107 +2,165 @@
 
 import { useRef, useState } from 'react'
 
-interface Props {
-  onPhotosChange: (base64s: string[]) => void
-  disabled?: boolean
+interface PhotoCaptureProps {
+  onPhotosChange: (photos: string[]) => void
+  maxPhotos?: number
 }
 
 const MAX_PHOTOS = 3
 
-async function fileToBase64(file: File): Promise<string> {
+async function fileToBase64(file: File, maxDimension: number = 1024): Promise<string> {
   return new Promise((resolve, reject) => {
-    const canvas = document.createElement('canvas')
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      const max = 1024
-      let { width, height } = img
-      if (width > max || height > max) {
-        if (width > height) { height = Math.round(height * max / width); width = max }
-        else { width = Math.round(width * max / height); height = max }
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      const img = new window.Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        let { width, height } = img
+
+        // Calculate new dimensions maintaining aspect ratio
+        if (width > height) {
+          if (width > maxDimension) {
+            height = Math.round((height * maxDimension) / width)
+            width = maxDimension
+          }
+        } else {
+          if (height > maxDimension) {
+            width = Math.round((width * maxDimension) / height)
+            height = maxDimension
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'))
+          return
+        }
+
+        ctx.drawImage(img, 0, 0, width, height)
+        const base64 = canvas.toDataURL('image/jpeg', 0.85)
+        resolve(base64)
       }
-      canvas.width = width
-      canvas.height = height
-      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height)
-      URL.revokeObjectURL(url)
-      resolve(canvas.toDataURL('image/jpeg', 0.85).split(',')[1])
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.src = e.target?.result as string
     }
-    img.onerror = reject
-    img.src = url
+    reader.onerror = () => reject(new Error('Failed to read file'))
+    reader.readAsDataURL(file)
   })
 }
 
-export default function PhotoCapture({ onPhotosChange, disabled }: Props) {
-  const [photos, setPhotos] = useState<{ preview: string; base64: string }[]>([])
-  const cameraRef = useRef<HTMLInputElement>(null)
-  const galleryRef = useRef<HTMLInputElement>(null)
+export function PhotoCapture({ onPhotosChange, maxPhotos = MAX_PHOTOS }: PhotoCaptureProps) {
+  const [photos, setPhotos] = useState<string[]>([])
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const galleryInputRef = useRef<HTMLInputElement>(null)
 
-  const addFiles = async (files: FileList | null) => {
+  const handlePhotoSelect = async (files: FileList | null) => {
     if (!files) return
-    const remaining = MAX_PHOTOS - photos.length
-    const toAdd = Array.from(files).slice(0, remaining)
-    const newPhotos = await Promise.all(
-      toAdd.map(async f => ({
-        preview: URL.createObjectURL(f),
-        base64: await fileToBase64(f),
-      }))
-    )
-    const updated = [...photos, ...newPhotos]
-    setPhotos(updated)
-    onPhotosChange(updated.map(p => p.base64))
+
+    const newPhotos = [...photos]
+    for (let i = 0; i < files.length && newPhotos.length < maxPhotos; i++) {
+      try {
+        const base64 = await fileToBase64(files[i])
+        newPhotos.push(base64)
+      } catch (error) {
+        console.error('Failed to process image:', error)
+      }
+    }
+
+    setPhotos(newPhotos)
+    onPhotosChange(newPhotos)
+
+    // Reset input so same file can be selected again
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+    if (galleryInputRef.current) galleryInputRef.current.value = ''
   }
 
-  const remove = (index: number) => {
-    const updated = photos.filter((_, i) => i !== index)
-    setPhotos(updated)
-    onPhotosChange(updated.map(p => p.base64))
+  const handleRemovePhoto = (index: number) => {
+    const newPhotos = photos.filter((_, i) => i !== index)
+    setPhotos(newPhotos)
+    onPhotosChange(newPhotos)
   }
+
+  const hasSpace = photos.length < maxPhotos
 
   return (
-    <div className="bg-[#111827] rounded-xl p-3 mb-3">
-      <p className="text-[10px] uppercase tracking-widest text-slate-500 mb-2">
-        Photos ({photos.length}/{MAX_PHOTOS})
-      </p>
-      <div className="grid grid-cols-3 gap-2 mb-3">
-        {Array.from({ length: MAX_PHOTOS }).map((_, i) => {
-          const photo = photos[i]
-          return photo ? (
-            <div key={i} className="relative rounded-lg overflow-hidden h-20 bg-blue-950">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photo.preview} alt="" className="w-full h-full object-cover" />
-              <button
-                onClick={() => remove(i)}
-                disabled={disabled}
-                className="absolute top-1 right-1 bg-red-500 rounded-full w-5 h-5 flex items-center justify-center text-white text-[10px] font-bold"
-              >✕</button>
-            </div>
-          ) : (
+    <div className="space-y-4 p-4 bg-color-surface2 rounded-lg border border-color-border">
+      <h2 className="text-sm font-semibold text-color-foreground">
+        Capture Photos
+        <span className="ml-2 text-xs text-color-muted">
+          ({photos.length}/{maxPhotos})
+        </span>
+      </h2>
+
+      <div className="flex gap-2">
+        <button
+          onClick={() => cameraInputRef.current?.click()}
+          disabled={!hasSpace}
+          className="flex-1 px-3 py-2 text-sm font-medium rounded bg-color-accent text-color-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+        >
+          📷 Camera
+        </button>
+        <button
+          onClick={() => galleryInputRef.current?.click()}
+          disabled={!hasSpace}
+          className="flex-1 px-3 py-2 text-sm font-medium rounded bg-color-accent text-color-foreground hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+        >
+          🖼️ Gallery
+        </button>
+      </div>
+
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={(e) => handlePhotoSelect(e.target.files)}
+        className="hidden"
+      />
+
+      <input
+        ref={galleryInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={(e) => handlePhotoSelect(e.target.files)}
+        className="hidden"
+      />
+
+      <div className="grid grid-cols-3 gap-2">
+        {Array.from({ length: maxPhotos }).map((_, index) => {
+          const photo = photos[index]
+          return (
             <div
-              key={i}
-              className="h-20 rounded-lg border-[1.5px] border-dashed border-slate-600 flex flex-col items-center justify-center text-slate-600"
+              key={index}
+              className="relative aspect-square rounded-lg bg-color-surface3 border border-color-border overflow-hidden group"
             >
-              <span className="text-xl">+</span>
-              <span className="text-[9px]">add</span>
+              {photo ? (
+                <>
+                  <img
+                    src={photo}
+                    alt={`Photo ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    onClick={() => handleRemovePhoto(index)}
+                    className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    <span className="text-2xl">✕</span>
+                  </button>
+                </>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-color-muted text-2xl">
+                  📸
+                </div>
+              )}
             </div>
           )
         })}
       </div>
-      <div className="flex gap-2">
-        <button
-          onClick={() => cameraRef.current?.click()}
-          disabled={disabled || photos.length >= MAX_PHOTOS}
-          className="flex-1 bg-sky-600 disabled:opacity-40 rounded-lg py-2 text-white text-xs font-bold"
-        >📷 Camera</button>
-        <button
-          onClick={() => galleryRef.current?.click()}
-          disabled={disabled || photos.length >= MAX_PHOTOS}
-          className="flex-1 bg-[#1e293b] disabled:opacity-40 rounded-lg py-2 text-slate-300 text-xs"
-        >🖼 Gallery</button>
-      </div>
-      <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple className="hidden"
-        onChange={e => addFiles(e.target.files)} />
-      <input ref={galleryRef} type="file" accept="image/*" multiple className="hidden"
-        onChange={e => addFiles(e.target.files)} />
     </div>
   )
 }
