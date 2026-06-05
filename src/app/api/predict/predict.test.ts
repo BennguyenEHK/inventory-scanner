@@ -78,7 +78,7 @@ describe('POST /api/predict', () => {
 
     expect(callModel).toHaveBeenCalledWith(
       expect.objectContaining({
-        model: 'Qwen/Qwen3.6-35B-A3B',
+        model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
         enable_thinking: true,
         budget_tokens: 3000,
       })

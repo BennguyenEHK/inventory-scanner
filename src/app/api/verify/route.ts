@@ -2,7 +2,7 @@ import { callModel } from '@/lib/inference'
 import type { VisionResult, SearchResult, InventoryItem, CheckpointResult } from '@/types'
 
 const BASE_PARAMS = {
-  model: 'Qwen/Qwen3.6-35B-A3B' as const,
+  model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai' as const,
   enable_thinking: true as const,
   budget_tokens: 2048,
   temperature: 0.1,

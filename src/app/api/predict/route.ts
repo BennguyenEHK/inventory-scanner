@@ -28,7 +28,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const raw = await callModel({
-      model: 'Qwen/Qwen3.6-35B-A3B',
+      model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: JSON.stringify(inputPayload) },

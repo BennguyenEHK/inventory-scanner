@@ -52,7 +52,7 @@ async function isSufficient(productName: string, prices: PriceSource[]): Promise
 
   try {
     const raw = await callModel({
-      model: 'Qwen/Qwen3.6-35B-A3B',
+      model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       enable_thinking: false, // fast mode for loop decisions
       temperature: 0.1,
       max_tokens: 64,
