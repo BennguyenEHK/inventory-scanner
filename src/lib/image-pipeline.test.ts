@@ -6,9 +6,13 @@ vi.mock('@/lib/firecrawl', () => ({
   firecrawlExtractImages: vi.fn(),
   isProductImage: vi.fn(),
 }))
-vi.mock('@/lib/gemini-images', () => ({
-  validateProductImages: vi.fn(),
-}))
+vi.mock('@/lib/gemini-images', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/gemini-images')>()
+  return {
+    ...actual,
+    validateProductImages: vi.fn(),
+  }
+})
 vi.mock('@/lib/tavily', () => ({
   tavilyImageSearch: vi.fn(),
 }))
@@ -119,7 +123,27 @@ describe('selectProductImages', () => {
     await selectProductImages('Bosch Drill', SOURCES, VISION)
 
     const candidates = vi.mocked(validateProductImages).mock.calls[0]?.[0] as string[]
-    const unique = new Set(candidates)
-    expect(unique.size).toBe(candidates?.length ?? 0)
+    expect(candidates).toHaveLength(1)
+    expect(candidates[0]).toBe('https://cdn.com/product.jpg')
+  })
+
+  it('does not pass primary candidate URLs to Tavily fallback pool', async () => {
+    const primaryUrl = 'https://store-a.com/product-img.jpg'
+    vi.mocked(firecrawlExtractImages).mockResolvedValue([primaryUrl])
+    vi.mocked(validateProductImages)
+      .mockResolvedValueOnce([])  // primary path: < 3
+      .mockResolvedValueOnce([])
+    vi.mocked(tavilyImageSearch).mockResolvedValue([
+      { url: primaryUrl, description: '' },           // duplicate — should be excluded
+      { url: 'https://tavily.com/new.jpg', description: '' },
+    ])
+
+    await selectProductImages('Bosch Drill', SOURCES, VISION)
+
+    // Second validateProductImages call should contain primaryUrl once (from candidates),
+    // not twice (not also from Tavily results)
+    const secondCallCandidates = vi.mocked(validateProductImages).mock.calls[1]?.[0] as string[]
+    const occurrences = secondCallCandidates?.filter(u => u === primaryUrl).length ?? 0
+    expect(occurrences).toBe(1)
   })
 })

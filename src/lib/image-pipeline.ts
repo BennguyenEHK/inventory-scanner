@@ -1,10 +1,9 @@
 import { firecrawlExtractImages, isProductImage } from '@/lib/firecrawl'
-import { validateProductImages } from '@/lib/gemini-images'
+import { validateProductImages, MAX_CANDIDATES } from '@/lib/gemini-images'
 import { tavilyImageSearch } from '@/lib/tavily'
 import type { PriceSource, VisionResult } from '@/types'
 
-const NEEDED        = 3
-const MAX_CANDIDATES = 8
+const NEEDED = 3
 
 export async function selectProductImages(
   productName: string,

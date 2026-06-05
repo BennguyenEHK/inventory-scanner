@@ -1,7 +1,7 @@
 import { callModel } from '@/lib/inference'
 import type { VisionResult } from '@/types'
 
-const MAX_CANDIDATES = 8
+export const MAX_CANDIDATES = 8
 
 interface FetchedImage {
   url: string
