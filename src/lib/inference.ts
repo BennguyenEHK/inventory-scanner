@@ -17,6 +17,35 @@ export function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 }
 
+// Vision models contain "VL" in the name; everything else is reasoning
+function isVisionModel(model: string): boolean {
+  return model.includes('VL')
+}
+
+async function tryRunPodFallback(
+  payload: Record<string, unknown>,
+  model: string
+): Promise<string | null> {
+  const isVision = isVisionModel(model)
+  const url    = isVision ? process.env.RUNPOD_VISION_URL    : process.env.RUNPOD_REASONING_URL
+  const rpModel = isVision ? process.env.RUNPOD_VISION_MODEL  : process.env.RUNPOD_REASONING_MODEL
+
+  if (!url) return null // pod not configured — skip silently
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (process.env.RUNPOD_API_KEY) headers.Authorization = `Bearer ${process.env.RUNPOD_API_KEY}`
+
+  const res = await fetch(`${url}/chat/completions`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ ...payload, model: rpModel ?? model }),
+    signal: AbortSignal.timeout(Number(process.env.RUNPOD_TIMEOUT_MS ?? 90_000)),
+  })
+  if (!res.ok) throw new Error(`RunPod fallback HTTP ${res.status}`)
+  const data = await res.json() as { choices?: { message: { content: string } }[] }
+  return data.choices?.[0]?.message.content ?? null
+}
+
 export async function callModel(params: CallModelParams): Promise<string> {
   const {
     model, messages,
@@ -36,9 +65,8 @@ export async function callModel(params: CallModelParams): Promise<string> {
     payload.chat_template_kwargs = { enable_thinking: true }
   }
 
-  // PRIMARY: HF Inference Providers — GPU-backed, pay-per-token, no pod management
-  // Routes by model name (Qwen/Qwen2.5-VL-7B-Instruct, Qwen/Qwen3.6-35B-A3B)
-  const hfUrl = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
+  // PRIMARY: HF Inference Providers — GPU, pay-per-token, routes by model name
+  const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
   const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
   try {
     const res = await fetch(hfUrl, {
@@ -55,22 +83,9 @@ export async function callModel(params: CallModelParams): Promise<string> {
     console.error('[inference] HF failed → RunPod fallback:', err instanceof Error ? err.message : String(err))
   }
 
-  // FALLBACK: RunPod persistent pod (optional — skipped if RUNPOD_BASE_URL not set)
-  if (!process.env.RUNPOD_BASE_URL) {
-    throw new Error('Inference failed: HF unavailable and RUNPOD_BASE_URL not configured')
-  }
+  // FALLBACK: RunPod — vision pod or reasoning pod depending on model type
+  const rpResult = await tryRunPodFallback(payload, model)
+  if (rpResult) return stripThinking(rpResult)
 
-  const rpHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (process.env.RUNPOD_API_KEY) rpHeaders.Authorization = `Bearer ${process.env.RUNPOD_API_KEY}`
-
-  const rpRes = await fetch(`${process.env.RUNPOD_BASE_URL}/chat/completions`, {
-    method: 'POST',
-    headers: rpHeaders,
-    body: JSON.stringify({ ...payload, model: process.env.RUNPOD_MODEL ?? model }),
-    signal: AbortSignal.timeout(Number(process.env.RUNPOD_TIMEOUT_MS ?? 90_000)),
-  })
-  if (!rpRes.ok) throw new Error(`RunPod fallback HTTP ${rpRes.status}`)
-  const rpData = await rpRes.json() as { choices?: { message: { content: string } }[] }
-  if (rpData.choices?.[0]) return stripThinking(rpData.choices[0].message.content)
-  throw new Error('Both HF and RunPod failed to return a response')
+  throw new Error(`Inference failed for model ${model} — both HF and RunPod unavailable`)
 }
