@@ -1,100 +1,67 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { VisionResult, PredictionResult } from '@/types'
 import { callModel } from '@/lib/inference'
 import { tavilySearch } from '@/lib/tavily'
+import type { VisionResult, PredictionResult } from '@/types'
 
-export async function POST(req: NextRequest): Promise<NextResponse<PredictionResult | { error: string }>> {
+const SYSTEM_PROMPT = `You are a product identification expert with deep knowledge of industrial, commercial, and consumer products.
+
+Given partial product information (manufacturer name, visual description, dimensions, packaging type), use your training knowledge to:
+1. Identify the most likely product line and model
+2. Explain your reasoning step by step
+3. List 2-3 candidate products ranked by likelihood
+4. Return your best prediction as structured JSON
+
+Be clinical and precise. Return JSON only after your reasoning.`
+
+export async function POST(request: Request): Promise<Response> {
   try {
-    const vision: VisionResult = await req.json()
+    const vision: VisionResult = await request.json()
 
-    // Build prompt for Qwen3.6 with reasoning
-    const systemPrompt = `You are an expert product identification specialist. Analyze visual evidence to predict the exact product name, manufacturer, and model.
+    const inputPayload = {
+      brand: vision.brand,
+      model_number: vision.model_number,
+      visual_description: vision.visual_description,
+      dimensions_visible: vision.dimensions_visible,
+      product_category: vision.product_category,
+      packaging_type: vision.packaging_type,
+      color: vision.color,
+      barcode: vision.barcode,
+    }
 
-Focus on:
-1. Brand indicators (logos, text, packaging design)
-2. Model numbers (alphanumeric sequences)
-3. Product category hints (shape, function, materials)
-4. Visible text clues
-
-Respond with JSON: { "product_name": "...", "model_number": "...|null", "manufacturer": "...", "product_line": "...", "reasoning": "...", "confidence": 0.0-1.0, "candidates": [{ "name": "...", "confidence": 0.0-1.0, "differentiator": "..." }] }`
-
-    const userPrompt = `Analyze this product:
-Brand: ${vision.brand || 'unknown'}
-Model Number: ${vision.model_number || 'not visible'}
-Category: ${vision.product_category}
-Visible Text: ${vision.visible_text.join(', ') || 'none'}
-Color: ${vision.color}
-Shape: ${vision.shape}
-Material Hints: ${vision.material_hints}
-Packaging: ${vision.packaging_type}
-Condition: ${vision.condition}
-Confidence in Visual Data: ${(vision.confidence * 100).toFixed(0)}%
-Image Quality: ${vision.image_quality}
-
-Provide your best prediction with reasoning.`
-
-    // Call Qwen3.6 with thinking enabled
-    const predictionJson = await callModel({
-      model: 'Qwen3.6',
+    const raw = await callModel({
+      model: 'Qwen/Qwen3.6-35B-A3B',
       messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: JSON.stringify(inputPayload) },
       ],
       enable_thinking: true,
-      budget_tokens: 4096,
-      temperature: 0.1,
-      max_tokens: 1024,
+      budget_tokens: 3000,
+      temperature: 0.2,
     })
 
-    // Parse prediction response
-    let prediction
-    try {
-      const jsonMatch = predictionJson.match(/\{[\s\S]*\}/)
-      if (!jsonMatch) throw new Error('No JSON in response')
-      prediction = JSON.parse(jsonMatch[0])
-    } catch {
-      throw new Error(`Failed to parse prediction: ${predictionJson}`)
-    }
+    const prediction: PredictionResult = JSON.parse(raw)
 
-    // Generate verification query
-    const verificationQuery = prediction.model_number
-      ? `${prediction.manufacturer} ${prediction.model_number}`
-      : `${prediction.manufacturer} ${prediction.product_name}`
+    // Verify with Tavily — prefer barcode lookup when available
+    const query = vision.barcode
+      ? `barcode ${vision.barcode} product`
+      : prediction.verification_query
+    const results = await tavilySearch(query, 3)
+    const confirmed = results.some(r =>
+      r.content.toLowerCase().includes(
+        prediction.prediction.product_name.toLowerCase().split(' ')[0]
+      )
+    )
 
-    // Quick verification via Tavily
-    let verificationPassed = false
-    let verificationDetails = ''
-
-    try {
-      const results = await tavilySearch(verificationQuery, 3)
-      if (results.length > 0) {
-        verificationPassed = true
-        verificationDetails = `Found ${results.length} sources matching "${verificationQuery}"`
-      } else {
-        verificationDetails = `No sources found for "${verificationQuery}"`
-      }
-    } catch (err) {
-      verificationDetails = `Verification search failed: ${err instanceof Error ? err.message : 'unknown error'}`
-    }
-
-    const result: PredictionResult = {
-      prediction: {
-        product_name: prediction.product_name || 'Unknown',
-        model_number: prediction.model_number || null,
-        manufacturer: prediction.manufacturer || 'Unknown',
-        product_line: prediction.product_line || '',
-        reasoning: prediction.reasoning || '',
-        prediction_confidence: prediction.confidence ?? 0.5,
+    return Response.json({
+      prediction,
+      verification: {
+        confirmed,
+        sources: results.slice(0, 2).map(r => ({ url: r.url, title: r.title })),
       },
-      candidates: prediction.candidates || [],
-      verification_query: verificationQuery,
-      requires_verification: prediction.confidence < 0.8,
-    }
-
-    return NextResponse.json(result)
+    })
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    console.error('[predict]', message)
-    return NextResponse.json({ error: message }, { status: 500 })
+    return Response.json(
+      { error: err instanceof Error ? err.message : 'Prediction failed' },
+      { status: 500 }
+    )
   }
 }
