@@ -1,4 +1,4 @@
-import { tavilyImageSearch } from '@/lib/tavily'
+import { selectProductImages } from '@/lib/image-pipeline'
 import { generateItemId } from '@/lib/itemId'
 import type { VisionResult, PredictionResult, SearchResult, CheckpointResult, InventoryItem, FinalReport } from '@/types'
 
@@ -45,13 +45,13 @@ export async function POST(request: Request): Promise<Response> {
       Notes:           assembleNotes(search, flags),
     }
 
-    const images = await tavilyImageSearch(`${productName} product image`, 3)
+    const images = await selectProductImages(productName, search.sources, vision)
     const sourceCount = cp2.clean_sources?.length ?? search.sources.length
 
     const report: FinalReport = {
       report_html: productName,
       notion_json:  item,
-      images:       images.map(i => i.url),
+      images,
       flags,
       sourceCount,
     }
