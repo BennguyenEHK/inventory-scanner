@@ -1,0 +1,117 @@
+<h2>App Layout — How should the scanner be structured?</h2>
+<p class="subtitle">Three approaches for the main inventory scanning experience</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="A" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f172a;padding:12px;border-radius:6px;font-family:monospace;font-size:11px;color:#94a3b8">
+        <div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:6px">
+          <div style="color:#38bdf8;font-weight:bold;font-size:12px">📦 Inventory Scanner</div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <span style="color:#64748b;font-size:10px">📷 Scan</span>
+            <span style="color:#64748b;font-size:10px">📋 Inventory</span>
+          </div>
+        </div>
+        <div style="background:#1e293b;border-radius:4px;padding:10px;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <div style="width:60px;height:60px;border:2px dashed #38bdf8;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#38bdf8;font-size:20px">📷</div>
+          <div style="color:#94a3b8;font-size:10px;margin-top:6px">Drop photo or tap to capture</div>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <div style="flex:1;height:4px;background:#38bdf8;border-radius:2px"></div>
+          <div style="flex:1;height:4px;background:#334155;border-radius:2px"></div>
+          <div style="flex:1;height:4px;background:#334155;border-radius:2px"></div>
+          <div style="flex:1;height:4px;background:#334155;border-radius:2px"></div>
+          <div style="flex:1;height:4px;background:#334155;border-radius:2px"></div>
+          <div style="flex:1;height:4px;background:#334155;border-radius:2px"></div>
+        </div>
+        <div style="color:#64748b;font-size:9px;text-align:center;margin-top:3px">Stage 1 of 6 running...</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Single-Page Pipeline</h3>
+      <p>One long page: upload → stages animate downward as they complete → report appears at bottom → qty input → save. Everything visible in a single scrollable flow.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Zero navigation — scan to save in one place</li><li>Progress is always visible</li><li>Great for mobile</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Page gets long with results</li><li>Hard to review past scans inline</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="B" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f172a;padding:12px;border-radius:6px;font-family:monospace;font-size:11px;color:#94a3b8">
+        <div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:6px;display:flex;gap:6px;align-items:center">
+          <div style="color:#38bdf8;font-weight:bold;font-size:12px">📦 Inventory Scanner</div>
+          <div style="margin-left:auto;display:flex;gap:6px">
+            <span style="background:#0284c7;color:white;padding:2px 6px;border-radius:3px;font-size:9px">Scan</span>
+            <span style="color:#64748b;font-size:9px;padding:2px 6px">Inventory</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <div style="width:45%;background:#1e293b;border-radius:4px;padding:8px">
+            <div style="width:100%;height:60px;border:2px dashed #334155;border-radius:4px;display:flex;align-items:center;justify-content:center;color:#475569;font-size:18px">📷</div>
+            <div style="margin-top:5px">
+              <div style="height:6px;background:#334155;border-radius:2px;margin-bottom:3px"></div>
+              <div style="height:6px;background:#1d4ed8;border-radius:2px;width:60%"></div>
+            </div>
+            <div style="color:#64748b;font-size:8px;margin-top:3px">Vision → Predict → Search</div>
+          </div>
+          <div style="flex:1;background:#1e293b;border-radius:4px;padding:8px">
+            <div style="color:#38bdf8;font-size:9px;font-weight:bold">ITEM REPORT</div>
+            <div style="height:4px;background:#334155;border-radius:2px;margin:3px 0"></div>
+            <div style="color:#94a3b8;font-size:8px">3M Scotch 810 Magic Tape</div>
+            <div style="color:#10b981;font-size:9px;margin-top:2px">Avg: $12.28</div>
+            <div style="background:#0f172a;padding:3px 5px;border-radius:3px;margin-top:4px">
+              <div style="color:#64748b;font-size:8px">Qty: <input style="width:24px;background:#1e293b;border:1px solid #334155;color:white;font-size:8px" placeholder="50"/></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Split Panel Dashboard</h3>
+      <p>Left panel: upload + pipeline progress. Right panel: live results as they come in. Both visible at once. Nav tabs for Scan vs Inventory list.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>See upload and results simultaneously</li><li>Professional dashboard feel</li><li>Efficient for power users</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Cramped on mobile</li><li>Complex layout logic</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-choice="C" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#0f172a;padding:12px;border-radius:6px;font-family:monospace;font-size:11px;color:#94a3b8">
+        <div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:6px">
+          <div style="color:#38bdf8;font-weight:bold;font-size:12px">📦 Inventory Scanner</div>
+        </div>
+        <!-- Step 1 active -->
+        <div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:4px;border-left:2px solid #38bdf8">
+          <div style="color:#38bdf8;font-size:9px;font-weight:bold">STEP 1 — UPLOAD</div>
+          <div style="display:flex;align-items:center;justify-content:center;height:40px;border:1px dashed #334155;border-radius:3px;margin-top:4px;color:#475569;font-size:14px">📷</div>
+        </div>
+        <!-- Step 2 locked -->
+        <div style="background:#1e293b;border-radius:4px;padding:8px;margin-bottom:4px;opacity:0.4;border-left:2px solid #334155">
+          <div style="color:#64748b;font-size:9px">STEP 2 — ANALYSIS</div>
+          <div style="color:#475569;font-size:8px;margin-top:2px">6 stages • ~20 sec</div>
+        </div>
+        <!-- Step 3 locked -->
+        <div style="background:#1e293b;border-radius:4px;padding:8px;opacity:0.4;border-left:2px solid #334155">
+          <div style="color:#64748b;font-size:9px">STEP 3 — CONFIRM & SAVE</div>
+          <div style="color:#475569;font-size:8px;margin-top:2px">Review · Qty · Notion</div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C — Guided Wizard Steps</h3>
+      <p>3 clear steps: Upload → Analysis runs → Review & save. Each step is a distinct card that expands as you complete the previous. Collapsed steps show status summary.</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>Crystal clear user flow</li><li>Each step focused, no overwhelm</li><li>Works well on all screen sizes</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Less "live" feeling during pipeline</li><li>Extra click to see collapsed sections</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:16px">Click your preferred layout, or describe what you want in the terminal below.</p>

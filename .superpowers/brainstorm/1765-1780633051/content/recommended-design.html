@@ -1,0 +1,238 @@
+<h2>Recommended Design — Mobile-First Inventory Scanner</h2>
+<p class="subtitle">Single-page vertical flow · Persistent command bar · Multi-photo · Voice/Text input</p>
+
+<div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;align-items:flex-start">
+
+  <!-- PHONE MOCKUP: STATE 1 - UPLOAD -->
+  <div style="text-align:center">
+    <div class="label" style="margin-bottom:8px">STATE 1 — CAPTURE</div>
+    <div style="width:240px;background:#0a0a0f;border-radius:32px;border:3px solid #1e293b;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5);position:relative">
+      <!-- Status bar -->
+      <div style="display:flex;justify-content:space-between;color:#64748b;font-size:9px;margin-bottom:10px;font-family:monospace">
+        <span>9:41</span><span>●●●●</span><span>🔋</span>
+      </div>
+      <!-- App header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div style="color:#38bdf8;font-weight:900;font-size:14px;letter-spacing:-0.5px">📦 InvScan</div>
+        <div style="display:flex;gap:6px">
+          <div style="background:#1e293b;border-radius:12px;padding:3px 8px;color:#94a3b8;font-size:9px">History</div>
+        </div>
+      </div>
+
+      <!-- Multi-photo zone -->
+      <div style="background:#111827;border-radius:12px;padding:10px;margin-bottom:10px">
+        <div style="color:#64748b;font-size:9px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Photos (3 max)</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:4px">
+          <!-- Photo 1 - filled -->
+          <div style="background:#1e3a5f;border-radius:6px;height:52px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+            <div style="font-size:18px">🖼️</div>
+            <div style="position:absolute;top:2px;right:2px;background:#ef4444;border-radius:50%;width:12px;height:12px;display:flex;align-items:center;justify-content:center;color:white;font-size:7px">✕</div>
+          </div>
+          <!-- Photo 2 - filled -->
+          <div style="background:#1e3a5f;border-radius:6px;height:52px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+            <div style="font-size:18px">🖼️</div>
+            <div style="position:absolute;top:2px;right:2px;background:#ef4444;border-radius:50%;width:12px;height:12px;display:flex;align-items:center;justify-content:center;color:white;font-size:7px">✕</div>
+          </div>
+          <!-- Photo 3 - empty/add -->
+          <div style="background:#1e293b;border-radius:6px;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;border:1.5px dashed #334155;cursor:pointer">
+            <div style="color:#38bdf8;font-size:16px">+</div>
+            <div style="color:#64748b;font-size:7px">add</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:5px;margin-top:8px">
+          <div style="flex:1;background:#0284c7;border-radius:8px;padding:6px;text-align:center;color:white;font-size:10px;font-weight:bold">📷 Camera</div>
+          <div style="flex:1;background:#1e293b;border-radius:8px;padding:6px;text-align:center;color:#94a3b8;font-size:10px">🖼 Gallery</div>
+        </div>
+      </div>
+
+      <!-- Analyze CTA -->
+      <div style="background:linear-gradient(135deg,#0284c7,#7c3aed);border-radius:12px;padding:12px;text-align:center;margin-bottom:10px">
+        <div style="color:white;font-weight:900;font-size:13px">⚡ Analyze Items</div>
+        <div style="color:rgba(255,255,255,0.6);font-size:9px;margin-top:2px">2 photos ready · ~25 sec</div>
+      </div>
+
+      <!-- Command bar (always visible) -->
+      <div style="background:#111827;border-radius:12px;padding:7px 10px;display:flex;gap:6px;align-items:center;border:1px solid #1e293b">
+        <div style="flex:1;color:#475569;font-size:10px">Type a command or speak…</div>
+        <div style="color:#64748b;font-size:13px">🎤</div>
+        <div style="background:#0284c7;border-radius:8px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:white;font-size:10px">↑</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHONE MOCKUP: STATE 2 - PIPELINE RUNNING -->
+  <div style="text-align:center">
+    <div class="label" style="margin-bottom:8px">STATE 2 — PIPELINE RUNNING</div>
+    <div style="width:240px;background:#0a0a0f;border-radius:32px;border:3px solid #1e293b;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+      <div style="display:flex;justify-content:space-between;color:#64748b;font-size:9px;margin-bottom:10px;font-family:monospace"><span>9:41</span><span>●●●●</span><span>🔋</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="color:#38bdf8;font-weight:900;font-size:14px">📦 InvScan</div>
+        <div style="color:#f59e0b;font-size:9px;font-weight:bold">● ANALYZING</div>
+      </div>
+
+      <!-- Pipeline stages -->
+      <div style="background:#111827;border-radius:12px;padding:8px;margin-bottom:10px">
+        <div style="color:#64748b;font-size:9px;margin-bottom:6px;text-transform:uppercase;letter-spacing:0.5px">Pipeline Progress</div>
+
+        <!-- Stage 1 - done -->
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b">
+          <div style="width:16px;height:16px;background:#10b981;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:8px">✓</div>
+          <div style="flex:1">
+            <div style="color:#10b981;font-size:9px;font-weight:bold">Vision Extraction</div>
+            <div style="color:#64748b;font-size:8px">3M Scotch 810 detected · 0.91 conf</div>
+          </div>
+        </div>
+        <!-- Stage 2 - skipped (high confidence) -->
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b;opacity:0.5">
+          <div style="width:16px;height:16px;background:#334155;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:8px">–</div>
+          <div style="flex:1">
+            <div style="color:#64748b;font-size:9px">Prediction</div>
+            <div style="color:#475569;font-size:8px">Skipped — high confidence</div>
+          </div>
+        </div>
+        <!-- Stage 3 - running -->
+        <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b">
+          <div style="width:16px;height:16px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:8px;animation:spin 1s linear infinite">⟳</div>
+          <div style="flex:1">
+            <div style="color:#f59e0b;font-size:9px;font-weight:bold">Price Search</div>
+            <div style="color:#64748b;font-size:8px">3/5 sources found…</div>
+          </div>
+        </div>
+        <!-- Stages 4-6 locked -->
+        <div style="opacity:0.35">
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b">
+            <div style="width:16px;height:16px;background:#1e293b;border-radius:50%;border:1px solid #334155"></div>
+            <div style="color:#475569;font-size:9px">Verification</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #1e293b">
+            <div style="width:16px;height:16px;background:#1e293b;border-radius:50%;border:1px solid #334155"></div>
+            <div style="color:#475569;font-size:9px">Report</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;padding:4px 0">
+            <div style="width:16px;height:16px;background:#1e293b;border-radius:50%;border:1px solid #334155"></div>
+            <div style="color:#475569;font-size:9px">Save to Notion</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Command bar (always visible, even while running) -->
+      <div style="background:#111827;border-radius:12px;padding:7px 10px;display:flex;gap:6px;align-items:center;border:1px solid #1e293b">
+        <div style="flex:1;color:#475569;font-size:10px">Ask anything while it runs…</div>
+        <div style="color:#64748b;font-size:13px">🎤</div>
+        <div style="background:#334155;border-radius:8px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:#64748b;font-size:10px">↑</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHONE MOCKUP: STATE 3 - REPORT + SAVE -->
+  <div style="text-align:center">
+    <div class="label" style="margin-bottom:8px">STATE 3 — REPORT + SAVE</div>
+    <div style="width:240px;background:#0a0a0f;border-radius:32px;border:3px solid #1e293b;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,0.5)">
+      <div style="display:flex;justify-content:space-between;color:#64748b;font-size:9px;margin-bottom:10px;font-family:monospace"><span>9:41</span><span>●●●●</span><span>🔋</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="color:#38bdf8;font-weight:900;font-size:14px">📦 InvScan</div>
+        <div style="color:#10b981;font-size:9px;font-weight:bold">✓ DONE</div>
+      </div>
+
+      <!-- Item Report Card -->
+      <div style="background:#111827;border-radius:12px;padding:8px;margin-bottom:8px;border:1px solid #1d4ed8">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+          <div>
+            <div style="color:#38bdf8;font-size:10px;font-weight:bold">3M Scotch 810 Magic Tape</div>
+            <div style="color:#64748b;font-size:8px">INV-20260605-0001</div>
+          </div>
+          <div style="background:#10b981;color:white;font-size:7px;padding:2px 5px;border-radius:4px">VERIFIED</div>
+        </div>
+        <!-- Verification images -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-bottom:6px">
+          <div style="background:#1e3a5f;border-radius:4px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px">🖼️</div>
+          <div style="background:#1e3a5f;border-radius:4px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px">🖼️</div>
+          <div style="background:#1e3a5f;border-radius:4px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px">🖼️</div>
+        </div>
+        <div style="color:#64748b;font-size:8px;text-align:center;margin-bottom:5px">↑ Tap images to confirm match</div>
+        <!-- Pricing breakdown -->
+        <div style="background:#0f172a;border-radius:6px;padding:5px;font-size:8px">
+          <div style="display:flex;justify-content:space-between;color:#10b981;font-weight:bold;margin-bottom:3px">
+            <span>💰 5 Sources</span><span style="color:#38bdf8">Avg: $12.28</span>
+          </div>
+          <div style="color:#64748b">Amazon $12.50 · Grainger $14.00</div>
+          <div style="color:#64748b">Home Depot $11.80 · Alibaba $9.90</div>
+        </div>
+        <!-- Fields -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:5px;font-size:8px">
+          <div style="background:#0f172a;border-radius:4px;padding:3px 5px"><span style="color:#64748b">Mfr: </span><span style="color:#94a3b8">3M</span></div>
+          <div style="background:#0f172a;border-radius:4px;padding:3px 5px"><span style="color:#64748b">Origin: </span><span style="color:#94a3b8">USA</span></div>
+          <div style="background:#0f172a;border-radius:4px;padding:3px 5px"><span style="color:#64748b">L: </span><span style="color:#94a3b8">1000 in</span></div>
+          <div style="background:#0f172a;border-radius:4px;padding:3px 5px"><span style="color:#64748b">W: </span><span style="color:#94a3b8">3/4 in</span></div>
+        </div>
+      </div>
+
+      <!-- Qty quick-tap + save button -->
+      <div style="background:#111827;border-radius:10px;padding:7px;margin-bottom:8px;display:flex;gap:5px;align-items:center">
+        <div style="color:#64748b;font-size:9px">Qty:</div>
+        <div style="display:flex;gap:3px">
+          <div style="background:#1e293b;border-radius:5px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:9px">−</div>
+          <div style="background:#0f172a;border-radius:5px;width:28px;height:20px;display:flex;align-items:center;justify-content:center;color:white;font-size:9px;border:1px solid #334155">50</div>
+          <div style="background:#1e293b;border-radius:5px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:9px">+</div>
+        </div>
+        <div style="flex:1;background:linear-gradient(135deg,#10b981,#0284c7);border-radius:8px;padding:5px;text-align:center;color:white;font-size:9px;font-weight:bold">✅ Save to Notion</div>
+      </div>
+
+      <!-- Persistent command bar -->
+      <div style="background:#111827;border-radius:12px;padding:7px 10px;display:flex;gap:6px;align-items:center;border:1px solid #0284c7">
+        <div style="flex:1;color:#94a3b8;font-size:10px;font-style:italic">"save qty 50"</div>
+        <div style="color:#0284c7;font-size:13px">🎤</div>
+        <div style="background:#0284c7;border-radius:8px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;color:white;font-size:10px">↑</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div style="max-width:700px;margin:24px auto 0;background:#111827;border-radius:12px;padding:16px;border:1px solid #1e293b">
+  <h3 style="color:#38bdf8;margin-top:0">Why this layout wins for your use case</h3>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px">
+    <div>
+      <div style="color:#10b981;font-weight:bold;margin-bottom:4px">✓ Mobile-first decisions</div>
+      <ul style="color:#94a3b8;margin:0;padding-left:16px;line-height:1.8">
+        <li>Large thumb-friendly tap zones</li>
+        <li>Bottom command bar (easy to reach)</li>
+        <li>No horizontal scrolling</li>
+        <li>Dark theme for warehouse/field</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color:#10b981;font-weight:bold;margin-bottom:4px">✓ Multi-photo support</div>
+      <ul style="color:#94a3b8;margin:0;padding-left:16px;line-height:1.8">
+        <li>3-photo grid (front, label, barcode)</li>
+        <li>Camera + gallery options</li>
+        <li>X to remove before sending</li>
+        <li>Counter shows readiness</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color:#10b981;font-weight:bold;margin-bottom:4px">✓ Voice/text commands</div>
+      <ul style="color:#94a3b8;margin:0;padding-left:16px;line-height:1.8">
+        <li>Persistent bar always visible</li>
+        <li>Mic button for voice input</li>
+        <li>"save qty 50" works directly</li>
+        <li>Bar active even during pipeline</li>
+      </ul>
+    </div>
+    <div>
+      <div style="color:#10b981;font-weight:bold;margin-bottom:4px">✓ Report visibility</div>
+      <ul style="color:#94a3b8;margin:0;padding-left:16px;line-height:1.8">
+        <li>3 verification images (tap to confirm)</li>
+        <li>All pricing sources visible</li>
+        <li>Key fields in compact grid</li>
+        <li>Verified badge for trust</li>
+      </ul>
+    </div>
+  </div>
+  <div style="margin-top:10px;background:#0f172a;border-radius:8px;padding:8px;color:#94a3b8;font-size:11px">
+    <span style="color:#f59e0b;font-weight:bold">Voice commands supported: </span>
+    "save qty 50" · "save 100 units" · "discard" · "rescan" · "update qty to 75" · "show inventory" · "delete this item"
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top:16px;text-align:center">Does this layout feel right? Or do you want me to adjust the report card, the photo section, or the command bar?</p>
