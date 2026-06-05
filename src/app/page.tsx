@@ -146,7 +146,7 @@ export default function ScanPage() {
   }
 
   const handleSave = async (qty: number) => {
-    if (!report) return
+    if (!report || appState === 'saved') return  // prevent double-save
     setSaving(true)
     setStage(6, 'running', `Saving qty ${qty}…`)
     try {
@@ -251,11 +251,11 @@ export default function ScanPage() {
 
           {/* Event stream */}
           {stream.map(event => {
-            if (event.kind === 'report' && report) {
+            if (event.kind === 'report') {
               return (
                 <ReportCard
                   key={event.id}
-                  report={report}
+                  report={event.report}
                   onSave={handleSave}
                   saving={saving}
                 />
