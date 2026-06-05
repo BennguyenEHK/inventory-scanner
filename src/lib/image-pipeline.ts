@@ -41,9 +41,13 @@ export async function selectProductImages(
   const allCandidates = [...candidates, ...fallbackCandidates]
   if (allCandidates.length === 0) return []
 
-  return validateProductImages(
+  const validated = await validateProductImages(
     allCandidates.slice(0, MAX_CANDIDATES),
     vision,
     NEEDED
   )
+
+  // If Gemini validation rejected everything, fall back to returning raw candidates
+  // (better to show some images than none)
+  return validated.length > 0 ? validated : allCandidates.slice(0, NEEDED)
 }
