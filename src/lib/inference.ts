@@ -17,9 +17,36 @@ export function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
 }
 
-// Vision models contain "VL" in the name; everything else is reasoning
+const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/openai'
+const HF_VISION_FALLBACK_MODEL = 'Qwen/Qwen2.5-VL-7B-Instruct:featherless-ai'
+
+function isGeminiModel(model: string): boolean {
+  return model.startsWith('gemini-')
+}
+
+// Vision models contain "VL" or are Gemini models
 function isVisionModel(model: string): boolean {
-  return model.includes('VL')
+  return model.includes('VL') || isGeminiModel(model)
+}
+
+async function tryGeminiVision(payload: Record<string, unknown>): Promise<string | null> {
+  const apiKey = process.env.GEMINI_KEYS
+  if (!apiKey) return null
+  try {
+    const res = await fetch(`${GEMINI_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(60_000),
+    })
+    if (!res.ok) throw new Error(`Gemini HTTP ${res.status}: ${res.statusText}`)
+    const data = await res.json() as { choices?: { message: { content: string } }[] }
+    if (data.choices?.[0]) return data.choices[0].message.content
+    throw new Error('Gemini returned no choices')
+  } catch (err) {
+    console.error('[inference] Gemini failed:', err instanceof Error ? err.message : String(err))
+    return null
+  }
 }
 
 async function tryRunPodFallback(
@@ -65,7 +92,38 @@ export async function callModel(params: CallModelParams): Promise<string> {
     payload.chat_template_kwargs = { enable_thinking: true }
   }
 
-  // PRIMARY: HF Inference Providers — GPU, pay-per-token, routes by model name
+  // VISION path: Gemini 2.5 Flash (primary) → HF Qwen VL (fallback) → RunPod vision pod
+  if (isGeminiModel(model)) {
+    const geminiResult = await tryGeminiVision(payload)
+    if (geminiResult) return geminiResult
+    console.error('[inference] Gemini failed → HF vision fallback')
+
+    // HF fallback uses Qwen VL since HF does not serve Gemini models
+    const hfPayload = { ...payload, model: HF_VISION_FALLBACK_MODEL }
+    const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
+    const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
+    try {
+      const res = await fetch(hfUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hfToken}` },
+        body: JSON.stringify(hfPayload),
+        signal: AbortSignal.timeout(60_000),
+      })
+      if (!res.ok) throw new Error(`HF HTTP ${res.status}: ${res.statusText}`)
+      const data = await res.json() as { choices?: { message: { content: string } }[] }
+      if (data.choices?.[0]) return stripThinking(data.choices[0].message.content)
+      throw new Error('HF returned no choices')
+    } catch (err) {
+      console.error('[inference] HF vision fallback failed → RunPod:', err instanceof Error ? err.message : String(err))
+    }
+
+    const rpResult = await tryRunPodFallback(payload, HF_VISION_FALLBACK_MODEL)
+    if (rpResult) return stripThinking(rpResult)
+
+    throw new Error(`Vision inference failed for model ${model} — Gemini, HF, and RunPod all unavailable`)
+  }
+
+  // NON-VISION path: HF Inference Providers (primary) → RunPod fallback
   const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
   const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
   try {
