@@ -39,7 +39,7 @@ export async function POST(request: Request): Promise<Response> {
         ],
       }],
       temperature: 0.1,
-      max_tokens: 1024,
+      max_tokens: 2048,
     })
 
     const vision: VisionResult = JSON.parse(raw)

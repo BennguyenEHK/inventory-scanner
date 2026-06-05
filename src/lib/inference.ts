@@ -68,7 +68,12 @@ async function tryGeminiVision(
     const response = await ai.models.generateContent({
       model,
       contents: toGeminiParts(messages),
-      config: { temperature, maxOutputTokens: maxTokens },
+      config: {
+        temperature,
+        maxOutputTokens: maxTokens,
+        thinkingConfig: { thinkingBudget: 0 },  // reserve all tokens for output, not reasoning
+        responseMimeType: 'application/json',    // enforces complete valid JSON — no markdown fences
+      },
     })
     return response.text ?? null
   } catch (err) {
