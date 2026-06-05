@@ -30,7 +30,7 @@ export async function POST(request: Request): Promise<Response> {
     }))
 
     const raw = await callModel({
-      model: 'Qwen/Qwen2.5-VL-7B-Instruct:hyperbolic',
+      model: 'Qwen/Qwen2.5-VL-7B-Instruct:featherless-ai',
       messages: [{
         role: 'user',
         content: [
