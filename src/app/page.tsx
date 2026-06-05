@@ -169,7 +169,7 @@ export default function ScanPage() {
 
       // Stage 3 — Price Search
       setStage(3, 'running', 'Searching prices…')
-      const search = await post<SearchResult>(apiUrl('/api/search', runId), { productName })
+      const search = await post<SearchResult>(apiUrl('/api/search', runId), { productName, vision })
       setStage(3, 'done', `${search.sources.length} sources · avg $${search.avg}`, {
         Attempts: String(search.attempts),
         Sources:  search.sources.map(s => `${s.name}: $${s.price} (${s.unit})`).join('\n'),
