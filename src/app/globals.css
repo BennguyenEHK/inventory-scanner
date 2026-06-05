@@ -3,23 +3,24 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-space-grotesk);
 
-  --color-surface:  #111827;
-  --color-surface2: #1e293b;
-  --color-border:   #334155;
-  --color-primary:  #0284c7;
-  --color-accent:   #38bdf8;
-  --color-success:  #10b981;
-  --color-warning:  #f59e0b;
-  --color-danger:   #ef4444;
-  --color-muted:    #64748b;
+  --color-surface:    #0f0d1e;
+  --color-surface2:   #12101e;
+  --color-border:     #1a1630;
+  --color-border2:    #2d1f50;
+  --color-muted:      #4c3a6e;
+  --color-confirmed:  #34d399;
+  --color-running:    #fb923c;
+  --color-accent:     #38bdf8;
+  --color-danger:     #ef4444;
 }
 
 :root {
-  --background: #0a0a0f;
-  --foreground: #e2e8f0;
+  --background:  #050408;
+  --foreground:  #e2e8f0;
+  --grad-from:   #c084fc;
+  --grad-to:     #38bdf8;
 }
 
 * { -webkit-tap-highlight-color: transparent; }
@@ -27,10 +28,15 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-family: var(--font-space-grotesk), system-ui, sans-serif;
   overscroll-behavior-y: contain;
+}
+
+@keyframes wave {
+  0%, 100% { transform: scaleY(1); }
+  50%       { transform: scaleY(0.3); }
 }
 
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: #2d1f50; border-radius: 2px; }

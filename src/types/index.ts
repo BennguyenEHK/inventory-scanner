@@ -124,3 +124,12 @@ export interface ParsedCommand {
   destination?: string
   raw: string
 }
+
+// Chat-log stream events (UI layer only)
+export type ChatEvent =
+  | { id: string; kind: 'photos'; previews: string[] }
+  | { id: string; kind: 'stage'; stageId: number; label: string; status: StageStatus; detail: string | null }
+  | { id: string; kind: 'report'; report: FinalReport }
+  | { id: string; kind: 'error'; message: string }
+  | { id: string; kind: 'clarification'; message: string }
+  | { id: string; kind: 'saved'; qty: number }
