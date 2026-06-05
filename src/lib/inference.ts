@@ -12,16 +12,9 @@ export interface CallModelParams {
   max_tokens?: number
 }
 
-// Exported for testing
+// Exported for testing — strips Qwen3 <think>...</think> reasoning blocks
 export function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()
-}
-
-// Exported for testing
-export function getEndpointId(model: string): string {
-  if (model.includes('VL')) return process.env.RUNPOD_VISION_ENDPOINT_ID!
-  if (model.includes('Qwen3')) return process.env.RUNPOD_REASONING_ENDPOINT_ID!
-  throw new Error(`Unknown model: ${model}`)
 }
 
 export async function callModel(params: CallModelParams): Promise<string> {
@@ -33,40 +26,47 @@ export async function callModel(params: CallModelParams): Promise<string> {
     max_tokens = 1024,
   } = params
 
+  // RUNPOD_MODEL env var overrides the model string (e.g. "inventScan")
+  const resolvedModel = process.env.RUNPOD_MODEL ?? model
+
   const payload: Record<string, unknown> = {
-    model, messages, temperature,
+    model: resolvedModel,
+    messages,
+    temperature,
     max_tokens: enable_thinking ? budget_tokens : max_tokens,
   }
+  // Qwen3 extended thinking — only sent when explicitly requested
   if (enable_thinking) {
     payload.chat_template_kwargs = { enable_thinking: true }
   }
 
-  // RunPod primary
+  // RunPod persistent pod — standard OpenAI-compatible vLLM server
+  // URL format: https://<pod-id>-<port>.proxy.runpod.net/v1
   try {
-    const endpointId = getEndpointId(model)
-    const res = await fetch(
-      `${process.env.RUNPOD_BASE_URL}/${endpointId}/runsync`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.RUNPOD_API_KEY}` },
-        body: JSON.stringify({ input: payload }),
-        signal: AbortSignal.timeout(Number(process.env.RUNPOD_TIMEOUT_MS ?? 90_000)),
-      }
-    )
-    const data = await res.json() as { status: string; output?: { choices?: { message: { content: string } }[] } }
-    if (data.status === 'COMPLETED' && data.output?.choices?.[0]) {
-      return stripThinking(data.output.choices[0].message.content)
-    }
-    throw new Error(`RunPod status: ${data.status}`)
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (process.env.RUNPOD_API_KEY) headers.Authorization = `Bearer ${process.env.RUNPOD_API_KEY}`
+
+    const res = await fetch(`${process.env.RUNPOD_BASE_URL}/chat/completions`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(Number(process.env.RUNPOD_TIMEOUT_MS ?? 90_000)),
+    })
+    if (!res.ok) throw new Error(`RunPod HTTP ${res.status}: ${res.statusText}`)
+    const data = await res.json() as { choices?: { message: { content: string } }[] }
+    if (data.choices?.[0]) return stripThinking(data.choices[0].message.content)
+    throw new Error('RunPod returned no choices')
   } catch (err) {
     console.error('[inference] RunPod failed → HF fallback:', err instanceof Error ? err.message : String(err))
   }
 
-  // HuggingFace fallback
+  // HuggingFace Inference Providers fallback — same OpenAI-compatible format
+  // Accepts both HF_TOKEN and HF_API_KEY env var names
+  const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
   const hfRes = await fetch(process.env.HF_BASE_URL!, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.HF_API_KEY}` },
-    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hfToken}` },
+    body: JSON.stringify({ ...payload, model }), // use original model name for HF routing
     signal: AbortSignal.timeout(60_000),
   })
   if (!hfRes.ok) throw new Error(`HF fallback failed: ${hfRes.status}`)

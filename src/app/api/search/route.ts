@@ -1,3 +1,4 @@
+import { callModel } from '@/lib/inference'
 import { tavilySearch } from '@/lib/tavily'
 import { firecrawlExtractAll } from '@/lib/firecrawl'
 import type { PriceSource, SearchResult } from '@/types'
@@ -42,20 +43,53 @@ function removeOutliers(prices: PriceSource[]): { clean: PriceSource[]; removed:
   return { clean, removed }
 }
 
+// ReAct sufficiency check — Qwen3.6 (thinking=OFF, fast mode) verifies prices
+// are for the correct product, not just that we have enough of them
+async function isSufficient(productName: string, prices: PriceSource[]): Promise<boolean> {
+  if (prices.length < TARGET_SOURCES) return false
+  const uniqueDomains = new Set(prices.map(p => new URL(p.url).hostname)).size
+  if (uniqueDomains < 3) return false
+
+  try {
+    const raw = await callModel({
+      model: 'Qwen/Qwen3.6-35B-A3B',
+      enable_thinking: false, // fast mode for loop decisions
+      temperature: 0.1,
+      max_tokens: 64,
+      messages: [{
+        role: 'user',
+        content: `Are these prices for the correct product "${productName}"? Answer JSON: {"sufficient": true/false, "reason": "brief"}
+Prices: ${prices.map(p => `${p.name}: $${p.price} (${p.unit})`).join(', ')}`,
+      }],
+    })
+    const result = JSON.parse(raw) as { sufficient: boolean }
+    return result.sufficient === true
+  } catch {
+    // If model call fails, fall back to count-only check
+    return prices.length >= TARGET_SOURCES
+  }
+}
+
 export async function POST(request: Request): Promise<Response> {
   try {
     const { productName } = await request.json() as { productName: string }
     let prices: PriceSource[] = []
     let attempt = 0
 
-    while (prices.length < TARGET_SOURCES && attempt < MAX_ATTEMPTS) {
+    while (attempt < MAX_ATTEMPTS) {
+      // THINK — generate query based on what source types we still need
       const query = generateQuery(productName, attempt, prices)
+
+      // ACT — search for URLs
       const urls = await tavilySearch(query, 8)
+
+      // ACT — scrape all URLs in parallel (never sequential)
       const scraped = await firecrawlExtractAll(urls.map(r => r.url))
       prices = deduplicate([...prices, ...scraped])
 
-      const uniqueDomains = new Set(prices.map(p => new URL(p.url).hostname)).size
-      if (prices.length >= TARGET_SOURCES && uniqueDomains >= 3) break
+      // OBSERVE + THINK — AI sufficiency check (semantic, not just count)
+      const sufficient = await isSufficient(productName, prices)
+      if (sufficient) break
 
       attempt++
     }
