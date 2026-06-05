@@ -54,14 +54,41 @@ export default function ChatBubble({ event, onReset }: Props) {
     const colorClass = STATUS_COLOR[event.status]
     const icon = STATUS_ICON[event.status]
     const dimmed = isDimmed(event.status)
+    const entries = event.data ? Object.entries(event.data) : []
     return (
       <div className={`${BUBBLE_BASE} ${colorClass} ${dimmed ? 'opacity-40' : ''}`}>
-        <span className={`mr-2 ${event.status === 'running' ? 'animate-spin inline-block' : ''}`}>
-          {icon}
-        </span>
-        <span className="font-medium">{event.label}</span>
-        {event.detail && (
-          <span className="text-[#4c3a6e] ml-1 text-[10px]">— {event.detail}</span>
+        {/* Stage header row */}
+        <div className="flex items-baseline gap-1.5">
+          <span className={`${event.status === 'running' ? 'animate-spin inline-block' : ''}`}>
+            {icon}
+          </span>
+          <span className="font-medium">{event.label}</span>
+          {event.detail && (
+            <span className="text-[#4c3a6e] text-[10px]">— {event.detail}</span>
+          )}
+        </div>
+
+        {/* Expandable detail box — only when data is available */}
+        {entries.length > 0 && (
+          <details className="mt-2 group">
+            <summary className="list-none cursor-pointer select-none flex items-center gap-1 text-[#4c3a6e] text-[9px] font-medium w-fit">
+              <svg
+                width="8" height="8" viewBox="0 0 8 8" fill="none"
+                className="transition-transform group-open:rotate-90"
+              >
+                <path d="M2.5 1.5L5.5 4 2.5 6.5" stroke="#4c3a6e" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Details
+            </summary>
+            <div className="mt-1.5 bg-[#080615] rounded-lg border border-[#1a1630] px-2.5 py-2 space-y-1.5">
+              {entries.map(([key, value]) => (
+                <div key={key} className="text-[9px]">
+                  <span className="text-[#4c3a6e] font-semibold uppercase tracking-wide">{key}</span>
+                  <p className="text-slate-400 mt-0.5 whitespace-pre-wrap break-words leading-relaxed">{value}</p>
+                </div>
+              ))}
+            </div>
+          </details>
         )}
       </div>
     )

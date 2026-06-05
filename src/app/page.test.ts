@@ -19,13 +19,14 @@ function setStageInStream(
   stream: ChatEvent[],
   id: number,
   status: StageStatus,
-  detail?: string
+  detail?: string,
+  data?: Record<string, string>
 ): ChatEvent[] {
   const existing = stream.find(e => e.kind === 'stage' && e.stageId === id)
   if (existing) {
     return stream.map(e =>
       e.kind === 'stage' && e.stageId === id
-        ? { ...e, status, detail: detail ?? e.detail }
+        ? { ...e, status, detail: detail ?? e.detail, ...(data ? { data } : {}) }
         : e
     )
   }
@@ -36,6 +37,7 @@ function setStageInStream(
     label: STAGE_LABELS[id],
     status,
     detail: detail ?? null,
+    ...(data ? { data } : {}),
   }]
 }
 
@@ -90,6 +92,22 @@ describe('page stream logic', () => {
     const result = markRunningStagesAsError(stream, 'timeout')
     expect(result.find(e => e.kind === 'stage' && e.stageId === 1)).toMatchObject({ status: 'done' })
     expect(result.find(e => e.kind === 'stage' && e.stageId === 2)).toMatchObject({ status: 'error', detail: 'timeout' })
+  })
+
+  it('setStageInStream attaches data payload when provided', () => {
+    const result = setStageInStream([], 1, 'done', 'Bosch · 91%', { route: 'A', confidence: '91%' })
+    expect(result[0]).toMatchObject({ data: { route: 'A', confidence: '91%' } })
+  })
+
+  it('setStageInStream updates data on existing stage', () => {
+    const stream = setStageInStream([], 1, 'running')
+    const updated = setStageInStream(stream, 1, 'done', 'detail', { route: 'B' })
+    expect(updated[0]).toMatchObject({ status: 'done', data: { route: 'B' } })
+  })
+
+  it('setStageInStream omits data key when no data provided', () => {
+    const result = setStageInStream([], 1, 'running', 'Analyzing…')
+    expect(result[0]).not.toHaveProperty('data')
   })
 
   it('STAGE_LABELS covers all 6 stages', () => {

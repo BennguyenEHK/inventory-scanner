@@ -169,11 +169,9 @@ export async function callModel(params: CallModelParams): Promise<string> {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hfToken}` },
       body: JSON.stringify(payload),
-      // Thinking-enabled calls can generate thousands of tokens — give them proportionally more time.
-      // budget_tokens=6000 → 120s, budget_tokens=8000 → 160s, capped at 180s.
-      signal: AbortSignal.timeout(
-        enable_thinking ? Math.min(180_000, budget_tokens * 20) : 60_000
-      ),
+      // Thinking-enabled calls run until the model is done — no artificial cap.
+      // Fast calls (thinking=OFF) keep the 60s safety net.
+      signal: AbortSignal.timeout(enable_thinking ? 290_000 : 60_000),
     })
     if (!res.ok) throw new Error(`HF HTTP ${res.status}: ${res.statusText}`)
     const data = await res.json() as { choices?: { message: { content: string } }[] }

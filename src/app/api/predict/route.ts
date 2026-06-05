@@ -2,6 +2,8 @@ import { callModel } from '@/lib/inference'
 import { tavilySearch } from '@/lib/tavily'
 import type { VisionResult, PredictionResult } from '@/types'
 
+export const maxDuration = 300
+
 const SYSTEM_PROMPT = `You are a product identification expert with deep knowledge of industrial, commercial, and consumer products.
 
 Given partial product information (manufacturer name, visual description, dimensions, packaging type), use your training knowledge to:

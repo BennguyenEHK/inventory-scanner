@@ -49,13 +49,13 @@ export default function ScanPage() {
   const appendEvent = (event: ChatEvent) =>
     setStream(prev => [...prev, event])
 
-  const setStage = (id: number, status: StageStatus, detail?: string) => {
+  const setStage = (id: number, status: StageStatus, detail?: string, data?: Record<string, string>) => {
     setStream(prev => {
       const existing = prev.find(e => e.kind === 'stage' && e.stageId === id)
       if (existing) {
         return prev.map(e =>
           e.kind === 'stage' && e.stageId === id
-            ? { ...e, status, detail: detail ?? e.detail }
+            ? { ...e, status, detail: detail ?? e.detail, ...(data ? { data } : {}) }
             : e
         )
       }
@@ -66,6 +66,7 @@ export default function ScanPage() {
         label: STAGE_LABELS[id],
         status,
         detail: detail ?? null,
+        ...(data ? { data } : {}),
       }]
     })
   }
@@ -90,7 +91,15 @@ export default function ScanPage() {
       const { vision, route } = await post<{ vision: VisionResult; route: RouteDecision }>(
         '/api/vision', { images: base64s }
       )
-      setStage(1, 'done', `${vision.brand ?? vision.product_category} · ${(vision.confidence * 100).toFixed(0)}% conf`)
+      setStage(1, 'done', `${vision.brand ?? vision.product_category} · ${(vision.confidence * 100).toFixed(0)}% conf`, {
+        Route:       route.route === 'A' ? 'A — direct search' : route.route === 'B' ? 'B — predict first' : 'C — unclear',
+        Confidence:  `${(vision.confidence * 100).toFixed(0)}%`,
+        Brand:       vision.brand ?? '—',
+        Model:       vision.model_number ?? '—',
+        Category:    vision.product_category,
+        Description: vision.visual_description,
+        'Visible text': vision.visible_text.length > 0 ? vision.visible_text.join(', ') : '—',
+      })
 
       if (route.route === 'C') {
         appendEvent({ id: `clarification-${Date.now()}`, kind: 'clarification', message: route.message ?? 'Image unclear — please retake.' })
@@ -106,7 +115,14 @@ export default function ScanPage() {
         const predRes = await post<{ prediction: PredictionResult }>('/api/predict', vision)
         prediction = predRes.prediction
         productName = predRes.prediction.prediction.product_name
-        setStage(2, 'done', productName)
+        setStage(2, 'done', productName, {
+          Confidence: `${(prediction.prediction.prediction_confidence * 100).toFixed(0)}%`,
+          Reasoning:  prediction.prediction.reasoning,
+          Candidates: prediction.candidates.map(c =>
+            `${c.name} (${(c.confidence * 100).toFixed(0)}%) — ${c.differentiator}`
+          ).join('\n'),
+          Query:      prediction.verification_query,
+        })
       } else {
         setStage(2, 'skipped', 'Skipped — high confidence')
       }
@@ -114,7 +130,14 @@ export default function ScanPage() {
       // Stage 3 — Price Search
       setStage(3, 'running', 'Searching prices…')
       const search = await post<SearchResult>('/api/search', { productName })
-      setStage(3, 'done', `${search.sources.length} sources · avg $${search.avg}`)
+      setStage(3, 'done', `${search.sources.length} sources · avg $${search.avg}`, {
+        Attempts:  String(search.attempts),
+        Sources:   search.sources.map(s => `${s.name}: $${s.price} (${s.unit})`).join('\n'),
+        Range:     `$${search.min} – $${search.max}`,
+        Removed:   search.contaminated_removed.length > 0
+          ? search.contaminated_removed.map(s => `${s.name}: $${s.price}`).join('\n')
+          : 'None',
+      })
 
       // Stage 4 — Verification
       setStage(4, 'running', 'Verifying…')
@@ -123,12 +146,22 @@ export default function ScanPage() {
         post<CheckpointResult>('/api/verify', { checkpoint: 2, productName, search }),
       ])
       const cp2Clean = cp2.clean_sources?.length ?? search.sources.length
-      setStage(4, 'done', `CP1: ${cp1.passed ? '✓' : '⚠'} · CP2: ${cp2Clean} clean sources`)
+      setStage(4, 'done', `CP1: ${cp1.passed ? '✓' : '⚠'} · CP2: ${cp2Clean} clean sources`, {
+        'CP1 result':  cp1.passed ? 'Pass ✓' : 'Fail ⚠',
+        'CP1 issues':  cp1.issues.length > 0 ? cp1.issues.join('\n') : 'None',
+        'CP2 kept':    `${cp2Clean} sources`,
+        'CP2 removed': cp2.removed_sources && cp2.removed_sources.length > 0
+          ? cp2.removed_sources.map(s => `${s.name}: ${s.reason}`).join('\n')
+          : 'None',
+      })
 
       // Stage 5 — Report
       setStage(5, 'running', 'Assembling report…')
       const finalReport = await post<FinalReport>('/api/report', { vision, prediction, search, cp1, cp2 })
-      setStage(5, 'done', finalReport.notion_json.ItemName)
+      setStage(5, 'done', finalReport.notion_json.ItemName, {
+        Sources: `${finalReport.sourceCount} verified`,
+        Flags:   finalReport.flags.length > 0 ? finalReport.flags.join('\n') : 'None',
+      })
 
       setReport(finalReport)
       appendEvent({ id: 'report', kind: 'report', report: finalReport })
