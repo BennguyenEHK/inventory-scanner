@@ -27,6 +27,20 @@ export function extractThinking(raw: string): { thinking: string | null; text: s
   return { thinking, text }
 }
 
+// Normalises provider-specific thinking fields into a single string.
+// Featherless/HF may put reasoning in `reasoning_content` instead of <think> tags.
+function buildRawContent(
+  msg: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null }
+): string {
+  const content = msg.content ?? ''
+  const reasoning = msg.reasoning_content ?? msg.reasoning ?? null
+  if (reasoning && !content.includes('<think>')) {
+    // Wrap external reasoning so extractThinking() handles it uniformly
+    return `<think>${reasoning}</think>${content}`
+  }
+  return content
+}
+
 const HF_VISION_FALLBACK_MODEL = 'Qwen/Qwen2.5-VL-7B-Instruct:featherless-ai'
 
 function isGeminiModel(model: string): boolean {
@@ -108,8 +122,10 @@ async function tryRunPodFallback(
     signal: AbortSignal.timeout(Number(process.env.RUNPOD_TIMEOUT_MS ?? 90_000)),
   })
   if (!res.ok) throw new Error(`RunPod fallback HTTP ${res.status}`)
-  const data = await res.json() as { choices?: { message: { content: string } }[] }
-  return data.choices?.[0]?.message.content ?? null
+  const data = await res.json() as { choices?: { message: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null } }[] }
+  const msg = data.choices?.[0]?.message
+  if (!msg) return null
+  return buildRawContent(msg)
 }
 
 // Internal: returns raw model output (may contain <think>…</think> blocks)
@@ -141,8 +157,8 @@ async function getModelContent(params: CallModelParams): Promise<string> {
         signal: AbortSignal.timeout(60_000),
       })
       if (!res.ok) throw new Error(`HF HTTP ${res.status}: ${res.statusText}`)
-      const data = await res.json() as { choices?: { message: { content: string } }[] }
-      if (data.choices?.[0]) return data.choices[0].message.content
+      const data = await res.json() as { choices?: { message: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null } }[] }
+      if (data.choices?.[0]) return buildRawContent(data.choices[0].message)
       throw new Error('HF returned no choices')
     } catch (err) {
       console.error('[inference] HF vision fallback failed → RunPod:', err instanceof Error ? err.message : String(err))
@@ -167,8 +183,8 @@ async function getModelContent(params: CallModelParams): Promise<string> {
       signal: AbortSignal.timeout(enable_thinking ? 290_000 : 60_000),
     })
     if (!res.ok) throw new Error(`HF HTTP ${res.status}: ${res.statusText}`)
-    const data = await res.json() as { choices?: { message: { content: string } }[] }
-    if (data.choices?.[0]) return data.choices[0].message.content
+    const data = await res.json() as { choices?: { message: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null } }[] }
+    if (data.choices?.[0]) return buildRawContent(data.choices[0].message)
     throw new Error('HF returned no choices')
   } catch (err) {
     console.error('[inference] HF failed → RunPod fallback:', err instanceof Error ? err.message : String(err))
