@@ -115,6 +115,19 @@ describe('validateProductImages', () => {
     expect(result).toHaveLength(3)
   })
 
+  it('returns fewer than needed when too many fetches fail', async () => {
+    // Only 1 of 4 fetches succeeds — fetched.length (1) < needed (3)
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValue(mockFetchImage())
+    // fetched.length <= needed → Gemini not called, returns those 1 URL directly
+    const result = await validateProductImages(CANDIDATE_URLS, VISION)
+    expect(result).toHaveLength(1)
+    expect(vi.mocked(callModel)).not.toHaveBeenCalled()
+  })
+
   it('respects the needed parameter', async () => {
     vi.mocked(callModel).mockResolvedValue('{"indices":[1,3]}')
     const result = await validateProductImages(CANDIDATE_URLS, VISION, 2)

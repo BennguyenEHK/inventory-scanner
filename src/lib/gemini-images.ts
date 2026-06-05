@@ -35,6 +35,7 @@ export async function validateProductImages(
     await Promise.all(capped.map(fetchAsBase64))
   ).filter((r): r is FetchedImage => r !== null)
 
+  // Last resort: if every image fetch failed, return raw candidate URLs unvalidated
   if (fetched.length === 0) return candidateUrls.slice(0, needed)
   if (fetched.length <= needed) return fetched.map(r => r.url)
 
@@ -74,7 +75,7 @@ export async function validateProductImages(
     return indices
       .filter((i): i is number => typeof i === 'number' && i >= 0 && i < fetched.length)
       .slice(0, needed)
-      .map(i => fetched[i].url)
+      .map(i => fetched[i].url) // indices are into fetched[], not candidateUrls[]
   } catch {
     return fetched.slice(0, needed).map(r => r.url)
   }
