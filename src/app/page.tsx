@@ -1,26 +1,25 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
-import PhotoCapture from '@/components/PhotoCapture'
-import PipelineProgress from '@/components/PipelineProgress'
-import ItemReport from '@/components/ItemReport'
-import QtyControl from '@/components/QtyControl'
+import CameraOverlay from '@/components/CameraOverlay'
 import CommandBar from '@/components/CommandBar'
+import ChatBubble from '@/components/ChatBubble'
+import ReportCard from '@/components/ReportCard'
 import type {
-  AppState, FinalReport, PipelineStage,
+  AppState, ChatEvent, FinalReport, StageStatus,
   VisionResult, RouteDecision, PredictionResult,
   SearchResult, CheckpointResult,
 } from '@/types'
 
-const INITIAL_STAGES: PipelineStage[] = [
-  { id: 1, label: 'Vision Extraction',  status: 'pending', detail: null },
-  { id: 2, label: 'Prediction',          status: 'pending', detail: null },
-  { id: 3, label: 'Price Search',        status: 'pending', detail: null },
-  { id: 4, label: 'Verification',        status: 'pending', detail: null },
-  { id: 5, label: 'Report Assembly',     status: 'pending', detail: null },
-  { id: 6, label: 'Save to Notion',      status: 'pending', detail: null },
-]
+const STAGE_LABELS: Record<number, string> = {
+  1: 'Vision Extraction',
+  2: 'Prediction',
+  3: 'Price Search',
+  4: 'Verification',
+  5: 'Report Assembly',
+  6: 'Save to Notion',
+}
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const res = await fetch(path, {
@@ -36,47 +35,65 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 }
 
 export default function ScanPage() {
-  const [appState, setAppState]   = useState<AppState>('capture')
-  const [photos, setPhotos]       = useState<string[]>([])
-  const [stages, setStages]       = useState<PipelineStage[]>(INITIAL_STAGES)
-  const [report, setReport]       = useState<FinalReport | null>(null)
-  const [toast, setToast]         = useState<{ msg: string; ok: boolean } | null>(null)
-  const [saving, setSaving]       = useState(false)
-  const [clarification, setClarification] = useState<string | null>(null)
+  const [appState, setAppState] = useState<AppState>('capture')
+  const [cameraOpen, setCameraOpen] = useState(false)
+  const [stream, setStream] = useState<ChatEvent[]>([])
+  const [report, setReport] = useState<FinalReport | null>(null)
+  const [saving, setSaving] = useState(false)
+  const streamEndRef = useRef<HTMLDivElement>(null)
 
-  const setStage = (id: number, status: PipelineStage['status'], detail?: string) =>
-    setStages(prev => prev.map(s => s.id === id ? { ...s, status, detail: detail ?? s.detail } : s))
+  useEffect(() => {
+    streamEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [stream.length])
 
-  const showToast = (msg: string, ok = true) => {
-    setToast({ msg, ok })
-    setTimeout(() => setToast(null), 4000)
+  const appendEvent = (event: ChatEvent) =>
+    setStream(prev => [...prev, event])
+
+  const setStage = (id: number, status: StageStatus, detail?: string) => {
+    setStream(prev => {
+      const existing = prev.find(e => e.kind === 'stage' && e.stageId === id)
+      if (existing) {
+        return prev.map(e =>
+          e.kind === 'stage' && e.stageId === id
+            ? { ...e, status, detail: detail ?? e.detail }
+            : e
+        )
+      }
+      return [...prev, {
+        id: `stage-${id}`,
+        kind: 'stage' as const,
+        stageId: id,
+        label: STAGE_LABELS[id],
+        status,
+        detail: detail ?? null,
+      }]
+    })
   }
 
   const reset = () => {
+    setStream([])
     setAppState('capture')
-    setPhotos([])
-    setStages(INITIAL_STAGES)
     setReport(null)
-    setClarification(null)
+    setCameraOpen(false)
   }
 
-  const runPipeline = async () => {
-    if (photos.length === 0) return
+  const runPipeline = async (capturedPhotos: { base64: string; preview: string }[]) => {
+    if (capturedPhotos.length === 0) return
+    const base64s = capturedPhotos.map(p => p.base64)
+    const previews = capturedPhotos.map(p => p.preview)
     setAppState('running')
-    setStages(INITIAL_STAGES)
-    setClarification(null)
+    appendEvent({ id: 'photos', kind: 'photos', previews })
 
     try {
       // Stage 1 — Vision
       setStage(1, 'running', 'Analyzing images…')
       const { vision, route } = await post<{ vision: VisionResult; route: RouteDecision }>(
-        '/api/vision', { images: photos }
+        '/api/vision', { images: base64s }
       )
       setStage(1, 'done', `${vision.brand ?? vision.product_category} · ${(vision.confidence * 100).toFixed(0)}% conf`)
 
-      // Route C — image too unclear
       if (route.route === 'C') {
-        setClarification(route.message ?? 'Image unclear — please retake.')
+        appendEvent({ id: `clarification-${Date.now()}`, kind: 'clarification', message: route.message ?? 'Image unclear — please retake.' })
         setAppState('capture')
         return
       }
@@ -99,7 +116,7 @@ export default function ScanPage() {
       const search = await post<SearchResult>('/api/search', { productName })
       setStage(3, 'done', `${search.sources.length} sources · avg $${search.avg}`)
 
-      // Stage 4 — Verification (CP1 + CP2 in parallel)
+      // Stage 4 — Verification
       setStage(4, 'running', 'Verifying…')
       const [cp1, cp2] = await Promise.all([
         post<CheckpointResult>('/api/verify', { checkpoint: 1, vision }),
@@ -114,13 +131,16 @@ export default function ScanPage() {
       setStage(5, 'done', finalReport.notion_json.ItemName)
 
       setReport(finalReport)
+      appendEvent({ id: 'report', kind: 'report', report: finalReport })
       setAppState('report')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Pipeline error'
-      setStages(prev =>
-        prev.map(s => s.status === 'running' ? { ...s, status: 'error', detail: msg } : s)
-      )
-      showToast(`❌ ${msg}`, false)
+      const message = err instanceof Error ? err.message : 'Pipeline error'
+      setStream(prev => prev.map(e =>
+        e.kind === 'stage' && e.status === 'running'
+          ? { ...e, status: 'error' as StageStatus, detail: message }
+          : e
+      ))
+      appendEvent({ id: `error-${Date.now()}`, kind: 'error', message })
       setAppState('capture')
     }
   }
@@ -135,12 +155,12 @@ export default function ScanPage() {
         item: report.notion_json,
         qty,
       })
-      setStage(6, 'done', 'Saved ✓')
-      showToast(res.message)
+      setStage(6, 'done', res.message)
+      appendEvent({ id: `saved-${Date.now()}`, kind: 'saved', qty })
       setAppState('saved')
     } catch (err) {
       setStage(6, 'error', 'Save failed')
-      showToast(`❌ ${err instanceof Error ? err.message : 'Save failed'}`, false)
+      appendEvent({ id: `error-${Date.now()}`, kind: 'error', message: err instanceof Error ? err.message : 'Save failed' })
     } finally {
       setSaving(false)
     }
@@ -155,9 +175,6 @@ export default function ScanPage() {
         case 'save':
           if (report && res.qty) await handleSave(res.qty)
           break
-        case 'update':
-          showToast('Use the qty stepper to update saved items', false)
-          break
         case 'navigate':
           window.location.href = res.destination ?? '/inventory'
           break
@@ -165,95 +182,107 @@ export default function ScanPage() {
           reset()
           break
         default:
-          showToast(`Unknown command: "${text}"`, false)
+          appendEvent({ id: `error-${Date.now()}`, kind: 'error', message: `Unknown command: "${text}"` })
       }
     } catch {
-      showToast('Command failed', false)
+      appendEvent({ id: `error-${Date.now()}`, kind: 'error', message: 'Command failed' })
     }
   }
 
   const isRunning = appState === 'running'
+  const headerStatus: 'idle' | 'running' | 'done' =
+    isRunning ? 'running' : (appState === 'report' || appState === 'saved') ? 'done' : 'idle'
 
   return (
-    <main className="max-w-md mx-auto px-3 pt-3 pb-28 min-h-screen">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-sky-400 font-black text-base tracking-tight">📦 InvScan</h1>
+    <>
+      <CameraOverlay
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onAnalyze={runPipeline}
+      />
+
+      {/* Fixed header */}
+      <header className="fixed top-0 left-0 right-0 z-30 bg-[#050408]/95 backdrop-blur-md border-b border-[#1a1630] px-4 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className={`w-1.5 h-1.5 rounded-full transition-colors ${
+            headerStatus === 'running' ? 'bg-[#fb923c] animate-pulse' :
+            headerStatus === 'done'    ? 'bg-[#34d399]' :
+                                         'bg-[#4c3a6e]'
+          }`} />
+          <span className="text-[15px] font-bold bg-gradient-to-r from-[#c084fc] to-[#38bdf8] bg-clip-text text-transparent">
+            InvScan
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           {isRunning && (
-            <span className="text-amber-400 text-[10px] font-bold animate-pulse">● ANALYZING</span>
+            <span className="text-[#fb923c] text-[10px] font-semibold tracking-wider animate-pulse">
+              ANALYZING
+            </span>
           )}
-          {appState === 'report' && (
-            <span className="text-emerald-400 text-[10px] font-bold">✓ DONE</span>
+          {(appState === 'report' || appState === 'saved') && (
+            <span className="text-[#34d399] text-[10px] font-semibold tracking-wider">✓ DONE</span>
           )}
-          <Link href="/inventory" className="bg-[#1e293b] rounded-full px-3 py-1 text-slate-400 text-[10px]">
+          <Link
+            href="/inventory"
+            className="text-[10px] font-semibold text-[#4c3a6e] bg-[#0f0d1e] border border-[#1a1630] rounded-full px-3 py-1"
+          >
             History
           </Link>
         </div>
-      </div>
+      </header>
 
-      {/* Route C clarification */}
-      {clarification && (
-        <div className="bg-amber-900/30 border border-amber-700 rounded-xl p-3 mb-3 text-amber-300 text-xs">
-          {clarification}
-        </div>
-      )}
+      {/* Chat stream */}
+      <main className="w-full pt-14 pb-[72px] min-h-screen">
+        <div className="flex flex-col gap-3 px-4 pt-4">
 
-      {/* STATE 1: Capture */}
-      {appState === 'capture' && (
-        <>
-          <PhotoCapture onPhotosChange={setPhotos} disabled={isRunning} />
-          <button
-            onClick={runPipeline}
-            disabled={photos.length === 0}
-            className="w-full bg-gradient-to-br from-sky-600 to-violet-600 disabled:opacity-40 rounded-xl py-3 text-white font-black text-sm mb-2"
-          >
-            ⚡ Analyze Items
-            {photos.length > 0 && (
-              <span className="text-xs font-normal ml-1 opacity-70">
-                {photos.length} photo{photos.length > 1 ? 's' : ''} ready
-              </span>
-            )}
-          </button>
-        </>
-      )}
-
-      {/* STATE 2: Running */}
-      {isRunning && <PipelineProgress stages={stages} />}
-
-      {/* STATE 3+4: Report / Saved */}
-      {(appState === 'report' || appState === 'saved') && report && (
-        <>
-          <PipelineProgress stages={stages} />
-          <ItemReport report={report} />
-          {appState === 'report' && (
-            <QtyControl onSave={handleSave} saving={saving} />
+          {/* Empty state */}
+          {stream.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-24 gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-[#0f0d1e] border border-[#2d1f50] flex items-center justify-center">
+                <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                  <rect x="2" y="7" width="24" height="17" rx="3" stroke="#4c3a6e" strokeWidth="1.5"/>
+                  <circle cx="14" cy="15.5" r="4.5" stroke="#4c3a6e" strokeWidth="1.5"/>
+                  <path d="M11 7l1.5-3h3l1.5 3" stroke="#4c3a6e" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <p className="text-[#4c3a6e] text-sm font-medium">Tap the camera to scan an item</p>
+            </div>
           )}
-          {appState === 'saved' && (
-            <button
-              onClick={reset}
-              className="w-full bg-[#1e293b] rounded-xl py-2.5 text-slate-300 text-sm font-bold mb-2"
-            >
-              📷 Scan Another Item
-            </button>
-          )}
-        </>
-      )}
 
-      {/* Toast */}
-      {toast && (
-        <div className={`fixed bottom-24 left-3 right-3 max-w-md mx-auto rounded-xl px-4 py-2.5 text-sm font-bold shadow-lg z-40 ${toast.ok ? 'bg-emerald-600' : 'bg-red-700'} text-white`}>
-          {toast.msg}
+          {/* Event stream */}
+          {stream.map(event => {
+            if (event.kind === 'report' && report) {
+              return (
+                <ReportCard
+                  key={event.id}
+                  report={report}
+                  onSave={handleSave}
+                  saving={saving}
+                />
+              )
+            }
+            return (
+              <ChatBubble
+                key={event.id}
+                event={event as Exclude<ChatEvent, { kind: 'report' }>}
+                onReset={reset}
+              />
+            )
+          })}
+
+          <div ref={streamEndRef} />
         </div>
-      )}
+      </main>
 
-      {/* Persistent Command Bar — always at bottom */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#0a0a0f]/95 backdrop-blur-sm px-3 pt-2 pb-4 max-w-md mx-auto">
+      {/* Fixed command bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-40">
         <CommandBar
           onCommand={handleCommand}
-          placeholder={appState === 'report' ? '"save qty 50" or speak…' : 'Type a command or speak…'}
+          onCameraOpen={() => setCameraOpen(true)}
+          placeholder={appState === 'report' ? '"save qty 50" or speak…' : 'Tap 📷 to scan, or type a command…'}
+          disabled={isRunning}
         />
       </div>
-    </main>
+    </>
   )
 }
