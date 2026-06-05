@@ -26,50 +26,51 @@ export async function callModel(params: CallModelParams): Promise<string> {
     max_tokens = 1024,
   } = params
 
-  // RUNPOD_MODEL env var overrides the model string (e.g. "inventScan")
-  const resolvedModel = process.env.RUNPOD_MODEL ?? model
-
   const payload: Record<string, unknown> = {
-    model: resolvedModel,
+    model,
     messages,
     temperature,
     max_tokens: enable_thinking ? budget_tokens : max_tokens,
   }
-  // Qwen3 extended thinking — only sent when explicitly requested
   if (enable_thinking) {
     payload.chat_template_kwargs = { enable_thinking: true }
   }
 
-  // RunPod persistent pod — standard OpenAI-compatible vLLM server
-  // URL format: https://<pod-id>-<port>.proxy.runpod.net/v1
+  // PRIMARY: HF Inference Providers — GPU-backed, pay-per-token, no pod management
+  // Routes by model name (Qwen/Qwen2.5-VL-7B-Instruct, Qwen/Qwen3.6-35B-A3B)
+  const hfUrl = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
+  const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
   try {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (process.env.RUNPOD_API_KEY) headers.Authorization = `Bearer ${process.env.RUNPOD_API_KEY}`
-
-    const res = await fetch(`${process.env.RUNPOD_BASE_URL}/chat/completions`, {
+    const res = await fetch(hfUrl, {
       method: 'POST',
-      headers,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hfToken}` },
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(Number(process.env.RUNPOD_TIMEOUT_MS ?? 90_000)),
+      signal: AbortSignal.timeout(60_000),
     })
-    if (!res.ok) throw new Error(`RunPod HTTP ${res.status}: ${res.statusText}`)
+    if (!res.ok) throw new Error(`HF HTTP ${res.status}: ${res.statusText}`)
     const data = await res.json() as { choices?: { message: { content: string } }[] }
     if (data.choices?.[0]) return stripThinking(data.choices[0].message.content)
-    throw new Error('RunPod returned no choices')
+    throw new Error('HF returned no choices')
   } catch (err) {
-    console.error('[inference] RunPod failed → HF fallback:', err instanceof Error ? err.message : String(err))
+    console.error('[inference] HF failed → RunPod fallback:', err instanceof Error ? err.message : String(err))
   }
 
-  // HuggingFace Inference Providers fallback — same OpenAI-compatible format
-  // Accepts both HF_TOKEN and HF_API_KEY env var names
-  const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
-  const hfRes = await fetch(process.env.HF_BASE_URL!, {
+  // FALLBACK: RunPod persistent pod (optional — skipped if RUNPOD_BASE_URL not set)
+  if (!process.env.RUNPOD_BASE_URL) {
+    throw new Error('Inference failed: HF unavailable and RUNPOD_BASE_URL not configured')
+  }
+
+  const rpHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (process.env.RUNPOD_API_KEY) rpHeaders.Authorization = `Bearer ${process.env.RUNPOD_API_KEY}`
+
+  const rpRes = await fetch(`${process.env.RUNPOD_BASE_URL}/chat/completions`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${hfToken}` },
-    body: JSON.stringify({ ...payload, model }), // use original model name for HF routing
-    signal: AbortSignal.timeout(60_000),
+    headers: rpHeaders,
+    body: JSON.stringify({ ...payload, model: process.env.RUNPOD_MODEL ?? model }),
+    signal: AbortSignal.timeout(Number(process.env.RUNPOD_TIMEOUT_MS ?? 90_000)),
   })
-  if (!hfRes.ok) throw new Error(`HF fallback failed: ${hfRes.status}`)
-  const hfData = await hfRes.json() as { choices: { message: { content: string } }[] }
-  return stripThinking(hfData.choices[0].message.content)
+  if (!rpRes.ok) throw new Error(`RunPod fallback HTTP ${rpRes.status}`)
+  const rpData = await rpRes.json() as { choices?: { message: { content: string } }[] }
+  if (rpData.choices?.[0]) return stripThinking(rpData.choices[0].message.content)
+  throw new Error('Both HF and RunPod failed to return a response')
 }
