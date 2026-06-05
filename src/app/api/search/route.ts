@@ -2,7 +2,7 @@ import { callModel } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
 import { tavilySearch } from '@/lib/tavily'
 import { firecrawlExtractAll } from '@/lib/firecrawl'
-import type { PriceSource, SearchResult } from '@/types'
+import type { PriceSource, SearchResult, VisionResult } from '@/types'
 
 const TARGET_SOURCES = 5
 const MAX_ATTEMPTS = 3
@@ -17,16 +17,45 @@ function deduplicate(prices: PriceSource[]): PriceSource[] {
   return Array.from(seen.values())
 }
 
-function generateQuery(productName: string, attempt: number, existing: PriceSource[]): string {
+function generateQuery(
+  productName: string,
+  attempt: number,
+  existing: PriceSource[],
+  vision?: VisionResult
+): string {
+  // Build a rich base from all available product signals
+  const parts: string[] = []
+
+  // Use brand + model number when available — much more precise than product name alone
+  if (vision?.brand && vision?.model_number) {
+    parts.push(vision.brand, vision.model_number)
+  } else if (vision?.brand) {
+    parts.push(vision.brand)
+    parts.push(productName)
+  } else {
+    parts.push(productName)
+  }
+
+  const category = vision?.product_category ?? ''
   const types = existing.map(s => s.name.toLowerCase())
-  if (attempt === 0) return `${productName} price buy`
+
+  if (attempt === 0) {
+    // First attempt: brand + model + category for precision
+    if (category) return `${parts.join(' ')} ${category} price`
+    return `${parts.join(' ')} price buy`
+  }
+
   if (attempt === 1) {
-    const missing = ['distributor', 'manufacturer', 'retailer'].find(t =>
+    // Second attempt: find a missing source type
+    const missing = ['distributor', 'wholesale', 'retailer', 'supplier'].find(t =>
       !types.some(n => n.includes(t))
     ) ?? 'supplier'
-    return `${productName} ${missing} cost`
+    return `${parts.join(' ')} ${missing} cost`
   }
-  return `${productName} supplier price USD`
+
+  // Third attempt: broaden with category + USD qualifier
+  if (category) return `${category} ${parts.join(' ')} buy online price USD`
+  return `${parts.join(' ')} supplier price USD`
 }
 
 function removeOutliers(prices: PriceSource[]): { clean: PriceSource[]; removed: PriceSource[] } {
@@ -48,9 +77,28 @@ async function isSufficient(
   prices: PriceSource[],
   runId: string | null
 ): Promise<boolean> {
-  if (prices.length < TARGET_SOURCES) return false
+  if (prices.length < TARGET_SOURCES) {
+    if (runId) {
+      await publishEvent(runId, {
+        kind: 'search_sufficient',
+        sufficient: false,
+        reason: `${prices.length}/${TARGET_SOURCES} prices — need more`,
+      })
+    }
+    return false
+  }
+
   const uniqueDomains = new Set(prices.map(p => new URL(p.url).hostname)).size
-  if (uniqueDomains < 3) return false
+  if (uniqueDomains < 3) {
+    if (runId) {
+      await publishEvent(runId, {
+        kind: 'search_sufficient',
+        sufficient: false,
+        reason: `only ${uniqueDomains} unique domain${uniqueDomains !== 1 ? 's' : ''} (need 3+)`,
+      })
+    }
+    return false
+  }
 
   try {
     const raw = await callModel({
@@ -83,12 +131,15 @@ export async function POST(request: Request): Promise<Response> {
   const runId = url.searchParams.get('runId')
 
   try {
-    const { productName } = await request.json() as { productName: string }
+    const { productName, vision: visionCtx } = await request.json() as {
+      productName: string
+      vision?: VisionResult
+    }
     let prices: PriceSource[] = []
     let attempt = 0
 
     while (attempt < MAX_ATTEMPTS) {
-      const query = generateQuery(productName, attempt, prices)
+      const query = generateQuery(productName, attempt, prices, visionCtx)
 
       // Publish the query being used
       if (runId) {
