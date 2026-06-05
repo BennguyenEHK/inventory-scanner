@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
         { role: 'user', content: JSON.stringify(inputPayload) },
       ],
       enable_thinking: true,
-      budget_tokens: 3000,
+      budget_tokens: 8000,
       temperature: 0.2,
     })
 

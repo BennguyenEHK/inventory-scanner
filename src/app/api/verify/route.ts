@@ -4,9 +4,9 @@ import type { VisionResult, SearchResult, InventoryItem, CheckpointResult } from
 const BASE_PARAMS = {
   model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai' as const,
   enable_thinking: true as const,
-  budget_tokens: 2048,
+  budget_tokens: 6000,
   temperature: 0.1,
-  max_tokens: 1024,
+  max_tokens: 2048,
 }
 
 async function checkpoint1(vision: VisionResult): Promise<CheckpointResult> {
