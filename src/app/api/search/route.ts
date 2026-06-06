@@ -3,7 +3,7 @@ import { publishEvent } from '@/lib/pipeline-bus'
 import { tavilySearch } from '@/lib/tavily'
 import { firecrawlExtractAll } from '@/lib/firecrawl'
 import { serpApiShoppingSearch } from '@/lib/serpapi'
-import { SEARCH_QUERY_SYSTEM_PROMPT, buildSearchQueryUserMessage } from '@/prompt/search-query'
+import { SEARCH_QUERY_SYSTEM_PROMPT, buildSearchQueryUserMessage, type ReSearchContext } from '@/prompt/search-query'
 import { SEARCH_SUFFICIENCY_SYSTEM_PROMPT, buildSufficiencyUserMessage } from '@/prompt/search-sufficiency'
 import type { PriceSource, SearchResult, VisionResult, SearchContext } from '@/types'
 
@@ -29,7 +29,9 @@ function deduplicate(prices: PriceSource[]): PriceSource[] {
 async function planSearchQueries(
   productName: string,
   vision?: VisionResult,
-  context?: SearchContext  // pass triedQueries so AI avoids repeating them
+  context?: SearchContext,
+  re_search?: boolean,
+  old_queries?: string[]
 ): Promise<string[]> {
   // Template fallback — only used if the AI call fails or returns nothing usable
   const fallback = [
@@ -38,23 +40,24 @@ async function planSearchQueries(
     `${productName} buy online USD`,
   ]
   try {
-    let userMessage = buildSearchQueryUserMessage(productName, vision ?? undefined)
+    const reSearchContext: ReSearchContext | undefined =
+      re_search && old_queries && old_queries.length > 0
+        ? { oldQueries: old_queries }
+        : undefined
 
-    if (context && context.triedQueries.length > 0) {
-      userMessage += `\n\nAlready tried queries (do NOT repeat):\n${context.triedQueries.map(q => `- ${q}`).join('\n')}`
-    }
+    const userMessage = buildSearchQueryUserMessage(productName, vision ?? undefined, reSearchContext)
 
     const raw = await callModel({
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       enable_thinking: false,
-      temperature: 0.1,
+      temperature: re_search ? 0.4 : 0.1,
       max_tokens: 4096,
       messages: [
         { role: 'system', content: SEARCH_QUERY_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
       ],
     })
-    const result = extractJson<{ queries: string[] }>(raw)
+    const result = extractJson<{ queries: string[]; reasoning?: string; rationale?: string }>(raw)
     const queries = (result?.queries ?? []).filter(q => typeof q === 'string' && q.trim().length > 0)
     return queries.length > 0 ? queries : fallback
   } catch {
@@ -180,13 +183,19 @@ export async function POST(request: Request): Promise<Response> {
     // Start with already-confirmed sources from a previous search cycle
     let prices: PriceSource[] = [...ctx.confirmedSources]
 
-    const queries = await planSearchQueries(productName, visionCtx, ctx)
-
     let attempt = 0
     let nextEngine: string | undefined
 
     while (attempt < MAX_ATTEMPTS) {
-      const query = queries[attempt] ?? queries[queries.length - 1]
+      const isReSearch = attempt > 0
+      const queries = await planSearchQueries(
+        productName,
+        visionCtx,
+        ctx,
+        isReSearch || undefined,
+        isReSearch ? [...ctx.triedQueries] : undefined
+      )
+      const query = queries[0]
       ctx.triedQueries.push(query)
 
       if (runId) await publishEvent(runId, { kind: 'search_query', attempt: attempt + 1, query })

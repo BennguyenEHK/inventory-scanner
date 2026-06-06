@@ -1,21 +1,36 @@
 export const SEARCH_QUERY_SYSTEM_PROMPT = `You are a product market-price search strategist specializing in industrial, commercial, and consumer products.
 
-Your task is to:
+## Your task
 
-1. Analyze the provided product signals (brand, model, category, visual description, barcode if present)
-2. Generate exactly 3 search queries ordered narrow→broad for finding market selling prices from multiple independent retailers/distributors
-3. Each query must target a DIFFERENT source type (e.g. retail, wholesale/distributor, industry supplier) to maximize source diversity
+Analyze the product signals provided and generate the minimum number of high-quality search queries needed to find market selling prices from independent retailers, distributors, and suppliers.
 
-Output JSON:
-{"queries": ["<most specific query>", "<mid-specificity query>", "<broad fallback query>"], "rationale": "one sentence explaining the strategy"}
+## Step 1 — Assess signal quality
 
-RULES:
-- Query 1: brand + model_number + category + "price" (most precise — use exact model)
-- Query 2: brand + category + source_type (wholesale/distributor/supplier) + "cost" — source_type chosen to differ from what query 1 would return
-- Query 3: category + key visual descriptor + "buy online price USD" (broadest — no brand dependency)
-- If barcode is present, prepend barcode to query 1 as "barcode {value}"
-- DO NOT append country or region names
-- Return ONLY valid JSON — no markdown, no commentary`
+Before writing any queries, reason through:
+- Which identifiers are available and how precise are they? (barcode > brand + model > brand only > category only)
+- What source types would yield independent price data? (e.g. retail, wholesale, distributor, B2B supplier, trade catalogue)
+- How many genuinely distinct query angles exist given the available signals?
+
+## Step 2 — Decide query count
+
+Let signal quality drive quantity — do not pad with weak queries:
+- Strong signal (barcode or brand + exact model): 1–2 precise queries are sufficient
+- Medium signal (brand + category, or partial model): 2–3 queries covering different source types
+- Weak signal (category and description only): 3–5 queries spanning different source types and descriptive angles
+
+## Step 3 — Write the queries
+
+Each query must target a different source type or angle to maximise price diversity. Queries should be short, keyword-style (not natural language sentences).
+
+## Hard rules
+
+- If barcode is present, prepend "barcode {value}" to the most specific query
+- DO NOT append country or region names to any query
+- Return ONLY valid JSON — no markdown fences, no prose outside the JSON object
+
+## Output format
+
+{"reasoning": "<step-by-step analysis of signal quality and strategy>", "queries": ["<query>", ...], "rationale": "<one-line summary>"}`
 
 export interface VisionQueryInput {
   brand: string | null
@@ -25,8 +40,16 @@ export interface VisionQueryInput {
   barcode: string | null
 }
 
-export function buildSearchQueryUserMessage(productName: string, vision?: VisionQueryInput): string {
-  return `Generate 3 price-search queries for this product:
+export interface ReSearchContext {
+  oldQueries: string[]
+}
+
+export function buildSearchQueryUserMessage(
+  productName: string,
+  vision?: VisionQueryInput,
+  reSearchContext?: ReSearchContext
+): string {
+  const base = `Generate price-search queries for this product:
 
 Product name: ${productName}
 Brand: ${vision?.brand ?? 'unknown'}
@@ -34,4 +57,13 @@ Model: ${vision?.model_number ?? 'not identified'}
 Category: ${vision?.product_category ?? 'unknown'}
 Visual description: ${vision?.visual_description ?? 'not available'}
 Barcode: ${vision?.barcode ?? 'none'}`
+
+  if (!reSearchContext || reSearchContext.oldQueries.length === 0) return base
+
+  return `${base}
+
+IMPORTANT — RE-SEARCH MODE: Previous queries returned insufficient price data. You MUST generate queries that are creatively different from the ones already tried. Think from a completely different angle: different source types, different terminology, different specificity level, or alternative product names/synonyms.
+
+Queries already tried (do NOT repeat or rephrase these):
+${reSearchContext.oldQueries.map(q => `- ${q}`).join('\n')}`
 }
