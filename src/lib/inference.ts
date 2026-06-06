@@ -170,17 +170,13 @@ async function getModelContent(params: CallModelParams): Promise<string> {
   }
 
   // NON-VISION path: HF → RunPod
-  // When thinking is on: thinking_budget controls the reasoning phase; max_tokens must exceed it
-  // to leave room for the final answer (4096 token answer buffer).
-  const ANSWER_BUFFER = 4096
-  const payload: Record<string, unknown> = {
-    model,
-    messages,
-    temperature,
-    max_tokens: enable_thinking ? budget_tokens + ANSWER_BUFFER : resolvedMaxTokens,
-  }
+  // resolvedMaxTokens = budget_tokens when thinking is on (thinking + answer share this budget),
+  // or max_tokens for standard calls. The model self-terminates <think> when done — no buffer needed.
+  // NOTE: thinking_budget is vLLM-only (local inference). HF/Featherless OpenAI-compatible API
+  // only supports enable_thinking in chat_template_kwargs — adding thinking_budget causes HTTP 400.
+  const payload: Record<string, unknown> = { model, messages, temperature, max_tokens: resolvedMaxTokens }
   if (enable_thinking) {
-    payload.chat_template_kwargs = { enable_thinking: true, thinking_budget: budget_tokens }
+    payload.chat_template_kwargs = { enable_thinking: true }
   }
 
   const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
@@ -192,7 +188,11 @@ async function getModelContent(params: CallModelParams): Promise<string> {
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(enable_thinking ? 290_000 : 60_000),
     })
-    if (!res.ok) throw new Error(`HF HTTP ${res.status}: ${res.statusText}`)
+    if (!res.ok) {
+      // Log the actual HF error body for easier diagnosis
+      const errBody = await res.text().catch(() => '')
+      throw new Error(`HF HTTP ${res.status}: ${res.statusText}${errBody ? ` — ${errBody.slice(0, 300)}` : ''}`)
+    }
     const data = await res.json() as { choices?: { message: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null } }[] }
     if (data.choices?.[0]) return buildRawContent(data.choices[0].message)
     throw new Error('HF returned no choices')
