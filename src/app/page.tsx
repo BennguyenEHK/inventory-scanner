@@ -50,6 +50,8 @@ export default function ScanPage() {
   const streamEndRef = useRef<HTMLDivElement>(null)
   const runIdRef = useRef<string>('')
   const esRef = useRef<EventSource | null>(null)
+  // When non-null, pipeline is paused waiting for user confirmation of a low-confidence prediction
+  const confirmResolveRef = useRef<((confirmed: boolean) => void) | null>(null)
 
   useEffect(() => {
     streamEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -207,6 +209,24 @@ export default function ScanPage() {
           ).join('\n') || '—',
           Query: prediction.verification_query,
         })
+
+        // Pause for user confirmation when prediction confidence is low
+        if (prediction.requires_verification && prediction.prediction.prediction_confidence < 0.65) {
+          appendEvent({
+            id: `clarification-${Date.now()}`,
+            kind: 'clarification',
+            message: `⚠️ Low confidence (${(prediction.prediction.prediction_confidence * 100).toFixed(0)}%) — I think this is "${productName}". Type "yes" to confirm and continue searching, or "no" to rescan.`,
+          })
+          const confirmed = await new Promise<boolean>(resolve => {
+            confirmResolveRef.current = resolve
+          })
+          confirmResolveRef.current = null
+          if (!confirmed) {
+            setAppState('capture')
+            esRef.current?.close()
+            return
+          }
+        }
       } else {
         setStage(2, 'skipped', 'Skipped — high confidence')
       }
@@ -315,6 +335,29 @@ export default function ScanPage() {
   }
 
   const handleCommand = async (text: string) => {
+    // Resolve a pending low-confidence prediction confirmation
+    if (confirmResolveRef.current) {
+      const t = text.trim().toLowerCase()
+      const confirmed = /^(yes|y|confirm|correct|ok|yep|sure|continue|proceed)/.test(t)
+      const denied   = /^(no|n|wrong|rescan|cancel|abort|stop|retry)/.test(t)
+      if (confirmed || denied) {
+        appendEvent({
+          id: `clarification-${Date.now()}`,
+          kind: 'clarification',
+          message: confirmed ? '✓ Confirmed — searching prices…' : '↩ Rescanning…',
+        })
+        confirmResolveRef.current(confirmed)
+        return
+      }
+      // Unrecognised input — remind the user what to type
+      appendEvent({
+        id: `clarification-${Date.now()}`,
+        kind: 'clarification',
+        message: 'Type "yes" to confirm and continue, or "no" to rescan.',
+      })
+      return
+    }
+
     // When in capture state, text input sets the prompt context for the next scan
     // (e.g. "check if we have this" — stored and sent with the next photo)
     if (appState === 'capture' && text.trim()) {

@@ -17,6 +17,9 @@ export async function serpApiSearch(query: string, num = 8): Promise<SerpApiResu
     engine: 'google',
     q: query.trim(),
     num: String(Math.min(Math.max(1, num), 20)),
+    hl: 'en',   // English results
+    gl: 'us',   // US market prices (most likely to be USD)
+    google_domain: 'google.com',
   })
 
   const res = await fetch(`${BASE_URL}?${params}`, {
@@ -45,6 +48,9 @@ export async function serpApiShoppingSearch(query: string, num = 10): Promise<Pr
     engine: 'google_shopping',
     q: query.trim(),
     num: String(Math.min(Math.max(1, num), 20)),
+    hl: 'en',
+    gl: 'us',
+    google_domain: 'google.com',
   })
 
   const res = await fetch(`${BASE_URL}?${params}`, {
