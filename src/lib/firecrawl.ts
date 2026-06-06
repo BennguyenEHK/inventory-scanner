@@ -91,13 +91,17 @@ export async function firecrawlExtractAll(urls: string[]): Promise<PriceSource[]
 // Blocks known junk patterns; passes anything that looks like an image URL
 const IMAGE_JUNK = /logo|icon|banner|sprite|avatar|thumbnail|header|placeholder|bg[-_]|background|favicon|pixel|tracking|beacon/i
 const IMAGE_EXT  = /\.(jpg|jpeg|png|webp|gif|avif)(\?|\/|$)/i
+// Block unsupported formats: SVG (vector), BMP, TIFF, HEIC/HEIF, ICO, etc.
+const BLOCKED_IMAGE_EXT = /\.(svg|bmp|tiff?|heic|heif|ico|cur|jp2|j2k|jpx|jpm)(\?|\/|$)/i
 
 export function isProductImage(url: string): boolean {
   try {
     const { hostname, pathname, href } = new URL(url)
     // Block known CDN junk patterns
     if (IMAGE_JUNK.test(pathname)) return false
-    // Accept if href contains an image extension anywhere
+    // Block unsupported image formats (SVG, BMP, TIFF, HEIC, etc.)
+    if (BLOCKED_IMAGE_EXT.test(href)) return false
+    // Accept if href contains a supported image extension
     if (IMAGE_EXT.test(href)) return true
     // Accept common image CDN hostnames even without explicit extension
     const imageCdnPatterns = /cdn|img|image|media|static|assets|photo|picture|product/i

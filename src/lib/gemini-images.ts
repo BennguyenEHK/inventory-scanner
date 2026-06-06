@@ -3,6 +3,9 @@ import type { VisionResult } from '@/types'
 
 export const MAX_CANDIDATES = 8
 
+// Gemini-supported MIME types (raster images only)
+const GEMINI_SUPPORTED_MIMES = /^image\/(jpeg|png|webp|gif)$/i
+
 interface FetchedImage {
   url: string
   base64: string
@@ -13,9 +16,19 @@ async function fetchAsBase64(url: string): Promise<FetchedImage | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
     if (!res.ok) return null
+    
+    // Extract MIME type, strip charset/params
+    const contentType = res.headers.get('content-type') ?? 'image/jpeg'
+    const mimeType = contentType.split(';')[0].trim()
+    
+    // Filter out unsupported formats (SVG, BMP, TIFF, HEIC, ICO, etc.)
+    if (!GEMINI_SUPPORTED_MIMES.test(mimeType)) {
+      console.warn(`[gemini-images] Skipping unsupported format: ${url} (${mimeType})`)
+      return null
+    }
+    
     const buffer = await res.arrayBuffer()
     const base64 = Buffer.from(buffer).toString('base64')
-    const mimeType = res.headers.get('content-type') ?? 'image/jpeg'
     return { url, base64, mimeType }
   } catch {
     return null

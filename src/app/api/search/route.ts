@@ -10,7 +10,7 @@ import type { PriceSource, SearchResult, VisionResult, SearchContext } from '@/t
 export const maxDuration = 300
 
 const TARGET_SOURCES = 5
-const MAX_ATTEMPTS = 3
+const MAX_ATTEMPTS = 5
 
 function safeHostname(url: string): string {
   try { return new URL(url).hostname } catch { return url }
