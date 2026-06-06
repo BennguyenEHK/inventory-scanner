@@ -2,21 +2,27 @@ export const SEARCH_QUERY_SYSTEM_PROMPT = `You are a product market-price search
 
 ## Your task
 
-Analyze the product signals provided and generate the minimum number of high-quality search queries needed to find market selling prices from independent retailers, distributors, and suppliers.
+Analyze the product signals provided and generate **exactly** the number of search queries specified in the user message. Each query must target a genuinely different source type or angle — maximize diversity across the full set.
 
 ## Step 1 — Assess signal quality
 
 Before writing any queries, reason through:
 - Which identifiers are available and how precise are they? (barcode > brand + exact model > brand only > category only)
 - What source types would yield independent price data? (retail store, wholesale distributor, trade supplier, B2B marketplace, industry catalogue)
-- How many genuinely distinct query angles exist given the available signals?
+- What genuinely distinct query angles exist given the available signals?
 
-## Step 2 — Decide query count
+## Step 2 — Distribute queries across angles
 
-Let signal quality drive quantity — do not pad with weak queries:
-- Strong signal (barcode or brand + exact model + catergory): 1–2 precise queries are sufficient
-- Medium signal (brand + category, or partial model): 2–3 queries covering different source types
-- Weak signal (category and description only): 3–5 queries spanning different source types and descriptive angles
+You must produce exactly the count requested. Spread them systematically:
+- Most precise: exact model + brand + retail buy keyword
+- Wholesale/distributor angle: model + "wholesale" / "supplier" / "cost"
+- Barcode angle (if barcode available): "barcode {value} {product name}"
+- B2B/trade catalogue angle: category + "B2B" / "trade" / "bulk pricing"
+- Descriptive/synonym angle: visual description + size/spec + source-type keyword
+
+If signal is strong (barcode or exact model): keep the precise identifier across queries, vary only the source-type keyword.
+If signal is weak (category/description only): vary both the identifier and the angle.
+If re-search mode: explore angles NOT already tried — different terminology, synonyms, alternative product names, or source types not yet covered.
 
 ## Step 3 — Write the queries
 
@@ -40,11 +46,12 @@ Bad query examples (do NOT write these):
 
 - If barcode is present, prepend "barcode {value}" to the most specific query
 - DO NOT append country or region names to any query
+- You MUST produce exactly the number of queries requested — no more, no fewer
 - Return ONLY valid JSON — no markdown fences, no prose outside the JSON object
 
 ## Output format
 
-{"reasoning": "<step-by-step analysis of signal quality, chosen source types, and query strategy>", "queries": ["<query>", ...], "rationale": "<one-line summary>"}`
+{"reasoning": "<step-by-step analysis of signal quality, angles chosen, and how count is distributed>", "queries": ["<query>", ...], "rationale": "<one-line summary>"}`
 
 export interface VisionQueryInput {
   brand: string | null
@@ -61,16 +68,19 @@ export interface ReSearchContext {
 export function buildSearchQueryUserMessage(
   productName: string,
   vision?: VisionQueryInput,
-  reSearchContext?: ReSearchContext
+  reSearchContext?: ReSearchContext,
+  count: number = 5
 ): string {
-  const base = `Generate price-search queries for this product:
+  const base = `Generate exactly ${count} price-search queries for this product:
 
 Product name: ${productName}
 Brand: ${vision?.brand ?? 'unknown'}
 Model: ${vision?.model_number ?? 'not identified'}
 Category: ${vision?.product_category ?? 'unknown'}
 Visual description: ${vision?.visual_description ?? 'not available'}
-Barcode: ${vision?.barcode ?? 'none'}`
+Barcode: ${vision?.barcode ?? 'none'}
+
+Required query count: ${count}`
 
   if (!reSearchContext || reSearchContext.oldQueries.length === 0) return base
 

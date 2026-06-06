@@ -31,7 +31,8 @@ async function planSearchQueries(
   vision?: VisionResult,
   context?: SearchContext,
   re_search?: boolean,
-  old_queries?: string[]
+  old_queries?: string[],
+  count: number = MAX_ATTEMPTS
 ): Promise<string[]> {
   // Template fallback — only used if the AI call fails or returns nothing usable
   const fallback = [
@@ -45,7 +46,7 @@ async function planSearchQueries(
         ? { oldQueries: old_queries }
         : undefined
 
-    const userMessage = buildSearchQueryUserMessage(productName, vision ?? undefined, reSearchContext)
+    const userMessage = buildSearchQueryUserMessage(productName, vision ?? undefined, reSearchContext, count)
 
     const raw = await callModel({
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
@@ -186,16 +187,18 @@ export async function POST(request: Request): Promise<Response> {
     let attempt = 0
     let nextEngine: string | undefined
 
+    const isReSearch = ctx.researchAttempt > 0
+    const queries = await planSearchQueries(
+      productName,
+      visionCtx,
+      ctx,
+      isReSearch || undefined,
+      isReSearch ? [...ctx.triedQueries] : undefined,
+      MAX_ATTEMPTS
+    )
+
     while (attempt < MAX_ATTEMPTS) {
-      const isReSearch = attempt > 0
-      const queries = await planSearchQueries(
-        productName,
-        visionCtx,
-        ctx,
-        isReSearch || undefined,
-        isReSearch ? [...ctx.triedQueries] : undefined
-      )
-      const query = queries[0]
+      const query = queries[attempt] ?? queries[queries.length - 1]
       ctx.triedQueries.push(query)
 
       if (runId) await publishEvent(runId, { kind: 'search_query', attempt: attempt + 1, query })
