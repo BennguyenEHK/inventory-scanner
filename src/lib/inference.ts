@@ -170,8 +170,18 @@ async function getModelContent(params: CallModelParams): Promise<string> {
   }
 
   // NON-VISION path: HF → RunPod
-  const payload: Record<string, unknown> = { model, messages, temperature, max_tokens: resolvedMaxTokens }
-  if (enable_thinking) payload.chat_template_kwargs = { enable_thinking: true }
+  // When thinking is on: thinking_budget controls the reasoning phase; max_tokens must exceed it
+  // to leave room for the final answer (4096 token answer buffer).
+  const ANSWER_BUFFER = 4096
+  const payload: Record<string, unknown> = {
+    model,
+    messages,
+    temperature,
+    max_tokens: enable_thinking ? budget_tokens + ANSWER_BUFFER : resolvedMaxTokens,
+  }
+  if (enable_thinking) {
+    payload.chat_template_kwargs = { enable_thinking: true, thinking_budget: budget_tokens }
+  }
 
   const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
   const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY

@@ -11,7 +11,7 @@ import { busEventToLine } from '@/lib/pipeline-bus'
 import type {
   AppState, ChatEvent, FinalReport, StageStatus,
   VisionResult, RouteDecision, PredictionResult,
-  SearchResult, CheckpointResult,
+  SearchResult, CheckpointResult, SearchContext, InventoryCheckResult,
 } from '@/types'
 
 const STAGE_LABELS: Record<number, string> = {
@@ -46,6 +46,7 @@ export default function ScanPage() {
   const [stream, setStream] = useState<ChatEvent[]>([])
   const [report, setReport] = useState<FinalReport | null>(null)
   const [saving, setSaving] = useState(false)
+  const [pendingPrompt, setPendingPrompt] = useState<string>('')
   const streamEndRef = useRef<HTMLDivElement>(null)
   const runIdRef = useRef<string>('')
   const esRef = useRef<EventSource | null>(null)
@@ -127,11 +128,15 @@ export default function ScanPage() {
     try {
       // Stage 1 — Vision
       setStage(1, 'running', 'Analyzing images…')
-      const { vision, route } = await post<{ vision: VisionResult; route: RouteDecision }>(
-        apiUrl('/api/vision', runId), { images: base64s }
-      )
+      const { vision, route, userPrompt: resolvedPrompt } = await post<{
+        vision: VisionResult; route: RouteDecision; userPrompt?: string
+      }>(apiUrl('/api/vision', runId), { images: base64s, userPrompt: pendingPrompt || undefined })
+      setPendingPrompt('')  // clear after use
       setStage(1, 'done', `${vision.brand ?? vision.product_category} · ${(vision.confidence * 100).toFixed(0)}% conf`, {
-        Route:         route.route === 'A' ? 'A — direct search' : route.route === 'B' ? 'B — predict first' : 'C — unclear',
+        Route:         route.route === 'A' ? 'A — direct search'
+                     : route.route === 'B' ? 'B — predict first'
+                     : route.route === 'D' ? 'D — inventory check'
+                     : 'C — unclear',
         Confidence:    `${(vision.confidence * 100).toFixed(0)}%`,
         Brand:         vision.brand ?? '—',
         Model:         vision.model_number ?? '—',
@@ -143,6 +148,45 @@ export default function ScanPage() {
       if (route.route === 'C') {
         appendEvent({ id: `clarification-${Date.now()}`, kind: 'clarification', message: route.message ?? 'Image unclear — please retake.' })
         setAppState('capture')
+        esRef.current?.close()
+        return
+      }
+
+      // Route D — inventory database check
+      if (route.route === 'D') {
+        setStage(2, 'skipped', 'Skipped — inventory check mode')
+        setStage(3, 'running', 'Checking inventory database…')
+        try {
+          const checkResult = await post<InventoryCheckResult>(
+            apiUrl('/api/inventory-check', runId),
+            { vision, userPrompt: resolvedPrompt ?? pendingPrompt }
+          )
+          setStage(3, 'done',
+            checkResult.found ? `Found ${checkResult.matchCount} match(es) in database` : 'Not found in database',
+            {
+              Found:      checkResult.found ? 'Yes ✓' : 'No',
+              Matches:    String(checkResult.matchCount),
+              'Query':    checkResult.queryUsed,
+              Conclusion: checkResult.conclusion,
+              ...(checkResult.items.length > 0 ? {
+                Items: checkResult.items.slice(0, 3).map(i =>
+                  `${i.ItemName} | Qty: ${i.Qty ?? '?'} | $${i.Market_Price}`
+                ).join('\n'),
+              } : {}),
+            }
+          )
+          appendEvent({
+            id: `clarification-${Date.now()}`,
+            kind: 'clarification',
+            message: checkResult.conclusion,
+          })
+        } catch (err) {
+          setStage(3, 'error', 'Database check failed')
+          throw err
+        }
+        setStage(4, 'skipped', 'Skipped — inventory check mode')
+        setStage(5, 'skipped', 'Skipped — inventory check mode')
+        setAppState('report')  // allow user to rescan or take action
         esRef.current?.close()
         return
       }
@@ -167,9 +211,9 @@ export default function ScanPage() {
         setStage(2, 'skipped', 'Skipped — high confidence')
       }
 
-      // Stage 3 — Price Search
+      // Stage 3 — Price Search (with optional re-search loop if CP2 signals contamination)
       setStage(3, 'running', 'Searching prices…')
-      const search = await post<SearchResult>(apiUrl('/api/search', runId), { productName, vision })
+      let search = await post<SearchResult>(apiUrl('/api/search', runId), { productName, vision })
       setStage(3, 'done', `${search.sources.length} sources · avg $${search.avg}`, {
         Attempts: String(search.attempts),
         Sources:  search.sources.map(s => `${s.name}: $${s.price} (${s.unit})`).join('\n'),
@@ -179,12 +223,41 @@ export default function ScanPage() {
           : 'None',
       })
 
-      // Stage 4 — Verification
+      // Stage 4 — Verification (CP1 + CP2 in parallel)
       setStage(4, 'running', 'Verifying…')
-      const [cp1, cp2] = await Promise.all([
+      let [cp1, cp2] = await Promise.all([
         post<CheckpointResult>(apiUrl('/api/verify', runId), { checkpoint: 1, vision }),
         post<CheckpointResult>(apiUrl('/api/verify', runId), { checkpoint: 2, productName, search }),
       ])
+
+      // Re-search loop: if CP2 found contaminated sources and signals retry (max 1 re-search)
+      if (cp2.re_search_needed && cp2.exclusion_context && search.context_for_retry) {
+        // Merge exclusion context from CP2 + context from search run
+        const mergedContext: SearchContext = {
+          triedQueries:         search.context_for_retry.triedQueries,
+          excludedDomains:      [...cp2.exclusion_context.excludedDomains, ...search.context_for_retry.excludedDomains],
+          contaminationReasons: [...cp2.exclusion_context.contaminationReasons],
+          confirmedSources:     cp2.exclusion_context.confirmedSources,
+          researchAttempt:      search.context_for_retry.researchAttempt,
+        }
+        setStage(3, 'running', `Re-searching — ${cp2.exclusion_context.excludedDomains.length} contaminated domain(s) excluded…`)
+        search = await post<SearchResult>(
+          apiUrl('/api/search', runId),
+          { productName, vision, context: mergedContext }
+        )
+        setStage(3, 'done', `${search.sources.length} sources · avg $${search.avg} (re-searched)`, {
+          Attempts: String(search.attempts),
+          Sources:  search.sources.map(s => `${s.name}: $${s.price} (${s.unit})`).join('\n'),
+          Range:    `$${search.min} – $${search.max}`,
+          Removed:  'N/A — excluded domains filtered',
+        })
+        // Re-run CP2 with the clean results
+        cp2 = await post<CheckpointResult>(
+          apiUrl('/api/verify', runId),
+          { checkpoint: 2, productName, search }
+        )
+      }
+
       const cp2Clean = cp2.clean_sources?.length ?? search.sources.length
       setStage(4, 'done', `CP1: ${cp1.passed ? '✓' : '⚠'} · CP2: ${cp2Clean} clean sources`, {
         'CP1 result':  cp1.passed ? 'Pass ✓' : 'Fail ⚠',
@@ -242,6 +315,18 @@ export default function ScanPage() {
   }
 
   const handleCommand = async (text: string) => {
+    // When in capture state, text input sets the prompt context for the next scan
+    // (e.g. "check if we have this" — stored and sent with the next photo)
+    if (appState === 'capture' && text.trim()) {
+      setPendingPrompt(text.trim())
+      appendEvent({
+        id: `clarification-${Date.now()}`,
+        kind: 'clarification',
+        message: `Got it: "${text}" — now take a photo to scan`,
+      })
+      return
+    }
+
     try {
       const res = await post<{ action: string; qty?: number; destination?: string }>(
         '/api/command', { text }

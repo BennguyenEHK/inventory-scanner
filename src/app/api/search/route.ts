@@ -2,60 +2,61 @@ import { callModel } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
 import { tavilySearch } from '@/lib/tavily'
 import { firecrawlExtractAll } from '@/lib/firecrawl'
-import type { PriceSource, SearchResult, VisionResult } from '@/types'
+import { serpApiShoppingSearch } from '@/lib/serpapi'
+import { SEARCH_QUERY_SYSTEM_PROMPT, buildSearchQueryUserMessage } from '@/prompt/search-query'
+import { SEARCH_SUFFICIENCY_SYSTEM_PROMPT, buildSufficiencyUserMessage } from '@/prompt/search-sufficiency'
+import type { PriceSource, SearchResult, VisionResult, SearchContext } from '@/types'
+
+export const maxDuration = 300
 
 const TARGET_SOURCES = 5
 const MAX_ATTEMPTS = 3
 
+function safeHostname(url: string): string {
+  try { return new URL(url).hostname } catch { return url }
+}
+
 function deduplicate(prices: PriceSource[]): PriceSource[] {
   const seen = new Map<string, PriceSource>()
   for (const p of prices) {
-    const domain = new URL(p.url).hostname
+    const domain = safeHostname(p.url)
     const existing = seen.get(domain)
     if (!existing || p.price < existing.price) seen.set(domain, p)
   }
   return Array.from(seen.values())
 }
 
-function generateQuery(
+async function planSearchQueries(
   productName: string,
-  attempt: number,
-  existing: PriceSource[],
-  vision?: VisionResult
-): string {
-  // Build a rich base from all available product signals
-  const parts: string[] = []
+  vision?: VisionResult,
+  context?: SearchContext  // pass triedQueries so AI avoids repeating them
+): Promise<string[]> {
+  try {
+    let userMessage = buildSearchQueryUserMessage(productName, vision ?? undefined)
 
-  // Use brand + model number when available — much more precise than product name alone
-  if (vision?.brand && vision?.model_number) {
-    parts.push(vision.brand, vision.model_number)
-  } else if (vision?.brand) {
-    parts.push(vision.brand)
-    parts.push(productName)
-  } else {
-    parts.push(productName)
+    if (context && context.triedQueries.length > 0) {
+      userMessage += `\n\nAlready tried queries (do NOT repeat):\n${context.triedQueries.map(q => `- ${q}`).join('\n')}`
+    }
+
+    const raw = await callModel({
+      model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
+      enable_thinking: false,
+      temperature: 0.1,
+      max_tokens: 512,
+      messages: [
+        { role: 'system', content: SEARCH_QUERY_SYSTEM_PROMPT },
+        { role: 'user', content: userMessage },
+      ],
+    })
+    const result = JSON.parse(raw) as { queries: string[] }
+    return result.queries
+  } catch {
+    return [
+      `${productName} price buy`,
+      `${productName} supplier cost`,
+      `${productName} buy online USD`,
+    ]
   }
-
-  const category = vision?.product_category ?? ''
-  const types = existing.map(s => s.name.toLowerCase())
-
-  if (attempt === 0) {
-    // First attempt: brand + model + category for precision
-    if (category) return `${parts.join(' ')} ${category} price`
-    return `${parts.join(' ')} price buy`
-  }
-
-  if (attempt === 1) {
-    // Second attempt: find a missing source type
-    const missing = ['distributor', 'wholesale', 'retailer', 'supplier'].find(t =>
-      !types.some(n => n.includes(t))
-    ) ?? 'supplier'
-    return `${parts.join(' ')} ${missing} cost`
-  }
-
-  // Third attempt: broaden with category + USD qualifier
-  if (category) return `${category} ${parts.join(' ')} buy online price USD`
-  return `${parts.join(' ')} supplier price USD`
 }
 
 function removeOutliers(prices: PriceSource[]): { clean: PriceSource[]; removed: PriceSource[] } {
@@ -75,8 +76,9 @@ function removeOutliers(prices: PriceSource[]): { clean: PriceSource[]; removed:
 async function isSufficient(
   productName: string,
   prices: PriceSource[],
-  runId: string | null
-): Promise<boolean> {
+  runId: string | null,
+  context?: SearchContext
+): Promise<{ sufficient: boolean; next_engine?: string }> {
   if (prices.length < TARGET_SOURCES) {
     if (runId) {
       await publishEvent(runId, {
@@ -85,10 +87,10 @@ async function isSufficient(
         reason: `${prices.length}/${TARGET_SOURCES} prices — need more`,
       })
     }
-    return false
+    return { sufficient: false }
   }
 
-  const uniqueDomains = new Set(prices.map(p => new URL(p.url).hostname)).size
+  const uniqueDomains = new Set(prices.map(p => safeHostname(p.url))).size
   if (uniqueDomains < 3) {
     if (runId) {
       await publishEvent(runId, {
@@ -97,7 +99,7 @@ async function isSufficient(
         reason: `only ${uniqueDomains} unique domain${uniqueDomains !== 1 ? 's' : ''} (need 3+)`,
       })
     }
-    return false
+    return { sufficient: false }
   }
 
   try {
@@ -106,13 +108,25 @@ async function isSufficient(
       enable_thinking: false,
       temperature: 0.1,
       max_tokens: 256,
-      messages: [{
-        role: 'user',
-        content: `Are these prices for the correct product "${productName}"? Answer JSON: {"sufficient": true/false, "reason": "brief"}
-Prices: ${prices.map(p => `${p.name}: $${p.price} (${p.unit})`).join(', ')}`,
-      }],
+      messages: [
+        { role: 'system', content: SEARCH_SUFFICIENCY_SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: buildSufficiencyUserMessage(
+            productName,
+            prices.map(p => ({ name: p.name, price: p.price, unit: p.unit })),
+            context
+              ? {
+                  triedQueries: context.triedQueries,
+                  researchAttempt: context.researchAttempt,
+                  excludedDomains: context.excludedDomains,
+                }
+              : undefined
+          ),
+        },
+      ],
     })
-    const result = JSON.parse(raw) as { sufficient: boolean; reason?: string }
+    const result = JSON.parse(raw) as { sufficient: boolean; reason?: string; next_engine?: string }
     if (runId) {
       await publishEvent(runId, {
         kind: 'search_sufficient',
@@ -120,9 +134,9 @@ Prices: ${prices.map(p => `${p.name}: $${p.price} (${p.unit})`).join(', ')}`,
         reason: result.reason,
       })
     }
-    return result.sufficient === true
+    return { sufficient: result.sufficient === true, next_engine: result.next_engine ?? undefined }
   } catch {
-    return prices.length >= TARGET_SOURCES
+    return { sufficient: prices.length >= TARGET_SOURCES }
   }
 }
 
@@ -131,47 +145,74 @@ export async function POST(request: Request): Promise<Response> {
   const runId = url.searchParams.get('runId')
 
   try {
-    const { productName, vision: visionCtx } = await request.json() as {
+    const { productName: rawName, vision: visionCtx, context: incomingContext } = await request.json() as {
       productName: string
       vision?: VisionResult
+      context?: SearchContext
     }
-    let prices: PriceSource[] = []
+    // Truncate product name to prevent prompt injection / oversized AI calls
+    const productName = typeof rawName === 'string' ? rawName.slice(0, 200) : 'Unknown Product'
+
+    // Build initial context (merge with incoming if re-search)
+    const ctx: SearchContext = incomingContext ?? {
+      triedQueries: [],
+      excludedDomains: [],
+      contaminationReasons: [],
+      confirmedSources: [],
+      researchAttempt: 0,
+    }
+
+    // Start with already-confirmed sources from a previous search cycle
+    let prices: PriceSource[] = [...ctx.confirmedSources]
+
+    const queries = await planSearchQueries(productName, visionCtx, ctx)
+
     let attempt = 0
+    let nextEngine: string | undefined
 
     while (attempt < MAX_ATTEMPTS) {
-      const query = generateQuery(productName, attempt, prices, visionCtx)
+      const query = queries[attempt] ?? queries[queries.length - 1]
+      ctx.triedQueries.push(query)
 
-      // Publish the query being used
-      if (runId) {
-        await publishEvent(runId, { kind: 'search_query', attempt: attempt + 1, query })
-      }
+      if (runId) await publishEvent(runId, { kind: 'search_query', attempt: attempt + 1, query })
 
-      // Search for URLs
-      const urls = await tavilySearch(query, 8)
-      if (runId) {
-        await publishEvent(runId, {
-          kind: 'search_tavily',
-          count: urls.length,
-          urls: urls.map(r => r.url),
+      // Decide which engines to use based on AI recommendation from previous attempt
+      const useShoppingApi = attempt > 0 && (nextEngine === 'serpapi_shopping' || nextEngine === 'both')
+      const useTavily = attempt === 0 || nextEngine === 'tavily' || nextEngine === 'both' || !nextEngine
+
+      // Run engines in parallel (Shopping API returns prices directly — skip Firecrawl for those)
+      const [tavilyResults, shoppingPrices] = await Promise.all([
+        useTavily ? tavilySearch(query, 8) : Promise.resolve([]),
+        useShoppingApi ? serpApiShoppingSearch(query) : Promise.resolve([]),
+      ])
+
+      if (runId) await publishEvent(runId, {
+        kind: 'search_tavily',
+        count: tavilyResults.length,
+        urls: tavilyResults.map(r => r.url),
+      })
+
+      // Filter out excluded domains before scraping
+      const urlsToScrape = tavilyResults
+        .map(r => r.url)
+        .filter(u => {
+          try { return !ctx.excludedDomains.includes(new URL(u).hostname) } catch { return false }
         })
-      }
 
-      // Scrape all URLs
-      if (runId) {
-        await publishEvent(runId, { kind: 'search_firecrawl', urlCount: urls.length })
-      }
-      const scraped = await firecrawlExtractAll(urls.map(r => r.url))
-      prices = deduplicate([...prices, ...scraped])
+      if (runId) await publishEvent(runId, { kind: 'search_firecrawl', urlCount: urlsToScrape.length })
+      const scraped = await firecrawlExtractAll(urlsToScrape)
 
-      if (runId) {
-        await publishEvent(runId, {
-          kind: 'search_prices',
-          newCount: scraped.length,
-          totalCount: prices.length,
-        })
-      }
+      // Merge: scraped organic + direct shopping prices
+      prices = deduplicate([...prices, ...scraped, ...shoppingPrices])
 
-      const sufficient = await isSufficient(productName, prices, runId)
+      if (runId) await publishEvent(runId, {
+        kind: 'search_prices',
+        newCount: scraped.length + shoppingPrices.length,
+        totalCount: prices.length,
+      })
+
+      const { sufficient, next_engine } = await isSufficient(productName, prices, runId, ctx)
+      nextEngine = next_engine
       if (sufficient) break
 
       attempt++
@@ -184,6 +225,14 @@ export async function POST(request: Request): Promise<Response> {
     const min = clean.length > 0 ? Math.min(...clean.map(p => p.price)) : 0
     const max = clean.length > 0 ? Math.max(...clean.map(p => p.price)) : 0
 
+    const contextForRetry: SearchContext = {
+      triedQueries: ctx.triedQueries,
+      excludedDomains: ctx.excludedDomains,
+      contaminationReasons: ctx.contaminationReasons,
+      confirmedSources: clean,
+      researchAttempt: ctx.researchAttempt + 1,
+    }
+
     const result: SearchResult = {
       sources: clean,
       avg, min, max,
@@ -192,13 +241,12 @@ export async function POST(request: Request): Promise<Response> {
       flag: clean.length < TARGET_SOURCES ? `⚠️ ${clean.length} sources only — verify price` : null,
       attempts: attempt + 1,
       contaminated_removed: removed,
+      context_for_retry: contextForRetry,
     }
 
     return Response.json(result)
   } catch (err) {
-    return Response.json(
-      { error: err instanceof Error ? err.message : 'Search failed' },
-      { status: 500 }
-    )
+    console.error('[search] Unexpected error:', err)
+    return Response.json({ error: 'Search failed' }, { status: 500 })
   }
 }

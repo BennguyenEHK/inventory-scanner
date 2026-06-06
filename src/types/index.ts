@@ -18,11 +18,11 @@ export interface VisionResult {
   image_quality: 'clear' | 'partial' | 'obscured' | 'unreadable'
 }
 
-// Vision routing decision
-export type VisionRoute = 'A' | 'B' | 'C'
+// Vision routing decision — Route D = inventory database check
+export type VisionRoute = 'A' | 'B' | 'C' | 'D'
 export interface RouteDecision {
   route: VisionRoute
-  strategy: 'direct_search' | 'predict_then_search' | 'ask_user'
+  strategy: 'direct_search' | 'predict_then_search' | 'ask_user' | 'check_database'
   message?: string
 }
 
@@ -47,6 +47,16 @@ export interface PredictionResult {
 }
 
 // Stage 3 — Search
+
+// Accumulated intra-session context threaded through the search → verify → re-search loop
+export interface SearchContext {
+  triedQueries: string[]           // queries already attempted — avoid repeating
+  excludedDomains: string[]        // domains confirmed contaminated by CP2
+  contaminationReasons: string[]   // why each domain was excluded
+  confirmedSources: PriceSource[]  // sources CP2 has already approved
+  researchAttempt: number          // how many re-search cycles have run (0 = first)
+}
+
 export interface PriceSource {
   name: string
   url: string
@@ -55,6 +65,7 @@ export interface PriceSource {
   unit: string
   in_stock?: boolean
 }
+
 export interface SearchResult {
   sources: PriceSource[]
   avg: number
@@ -65,6 +76,15 @@ export interface SearchResult {
   flag: string | null
   attempts: number
   contaminated_removed: PriceSource[]
+  context_for_retry?: SearchContext  // context for client to pass on re-search if CP2 fails
+}
+
+// SerpAPI organic/shopping result shape
+export interface SerpApiResult {
+  url: string
+  title: string
+  content: string
+  source?: string
 }
 
 // Stage 4 — Verification
@@ -78,6 +98,18 @@ export interface CheckpointResult {
   clean_sources?: PriceSource[]
   removed_sources?: (PriceSource & { reason: string })[]
   clean_count?: number
+  // CP2-only: signals orchestrator to re-run search with exclusion context
+  re_search_needed?: boolean
+  exclusion_context?: SearchContext
+}
+
+// Stage 3b — Inventory database check (Route D)
+export interface InventoryCheckResult {
+  found: boolean
+  matchCount: number
+  items: InventoryItem[]
+  conclusion: string   // reasoning model's human-readable conclusion for the user
+  queryUsed: string    // what was sent to Notion search
 }
 
 // Stage 5 — Final Report

@@ -1,13 +1,16 @@
 import { callModelWithThinking } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
-import type { VisionResult, SearchResult, InventoryItem, CheckpointResult } from '@/types'
+import type { VisionResult, SearchResult, InventoryItem, CheckpointResult, SearchContext } from '@/types'
+import { VERIFY_CP1_SYSTEM_PROMPT, buildCp1UserMessage } from '@/prompt/verify-cp1'
+import { VERIFY_CP2_SYSTEM_PROMPT, buildCp2UserMessage } from '@/prompt/verify-cp2'
+import { VERIFY_CP3_SYSTEM_PROMPT, buildCp3UserMessage } from '@/prompt/verify-cp3'
 
 export const maxDuration = 300
 
 const BASE_PARAMS = {
   model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai' as const,
   enable_thinking: true as const,
-  budget_tokens: 6000,
+  budget_tokens: 81_920,
   temperature: 0.1,
   max_tokens: 2048,
 }
@@ -36,11 +39,8 @@ async function checkpoint1(vision: VisionResult, runId: string | null): Promise<
   const { text, thinking } = await callModelWithThinking({
     ...BASE_PARAMS,
     messages: [
-      {
-        role: 'system',
-        content: 'You are a product verification expert. Given extracted product information, verify logical consistency. Check: does manufacturer match product category? Does model number format match brand conventions? Are dimensions plausible? Return JSON only.',
-      },
-      { role: 'user', content: JSON.stringify(vision) },
+      { role: 'system', content: VERIFY_CP1_SYSTEM_PROMPT },
+      { role: 'user', content: buildCp1UserMessage(vision) },
     ],
   })
   if (runId && thinking) {
@@ -53,28 +53,40 @@ async function checkpoint2(productName: string, search: SearchResult, runId: str
   const { text, thinking } = await callModelWithThinking({
     ...BASE_PARAMS,
     messages: [
-      {
-        role: 'system',
-        content: 'You are a price verification auditor. Given a target product name and scraped prices, verify each result is for the EXACT same product. Watch for: similar model numbers, different sizes, accessories, bundles, multi-packs priced as singles. For each result: KEEP or REMOVE with reason. Return JSON only.',
-      },
-      { role: 'user', content: JSON.stringify({ productName, sources: search.sources }) },
+      { role: 'system', content: VERIFY_CP2_SYSTEM_PROMPT },
+      { role: 'user', content: buildCp2UserMessage(productName, search.sources) },
     ],
   })
   if (runId && thinking) {
     await publishEvent(runId, { kind: 'thinking', stageId: 4, cp: 2, text: thinking })
   }
-  return normalizeCheckpoint(text, 2)
+
+  const result = normalizeCheckpoint(text, 2)
+
+  // Signal re-search when CP2 audit finds too few clean sources
+  if (!result.passed || (result.clean_count ?? result.clean_sources?.length ?? 0) < 3) {
+    result.re_search_needed = true
+    const exclusionContext: SearchContext = {
+      triedQueries: [],
+      excludedDomains: (result.removed_sources ?? [])
+        .map(s => { try { return new URL(s.url).hostname } catch { return '' } })
+        .filter(Boolean),
+      contaminationReasons: (result.removed_sources ?? []).map(s => s.reason),
+      confirmedSources: result.clean_sources ?? [],
+      researchAttempt: 0,  // client will set from search.context_for_retry.researchAttempt
+    }
+    result.exclusion_context = exclusionContext
+  }
+
+  return result
 }
 
 async function checkpoint3(item: InventoryItem, runId: string | null): Promise<CheckpointResult> {
   const { text, thinking } = await callModelWithThinking({
     ...BASE_PARAMS,
     messages: [
-      {
-        role: 'system',
-        content: 'You are a data quality auditor for an inventory system. Review this complete inventory record for logical consistency. Verify all fields populated, units include units string (e.g. "150 mm"), Ext_Price equals Market_Price × Qty, Notes contains "Prices:" prefix. Return JSON only.',
-      },
-      { role: 'user', content: JSON.stringify(item) },
+      { role: 'system', content: VERIFY_CP3_SYSTEM_PROMPT },
+      { role: 'user', content: buildCp3UserMessage(item) },
     ],
   })
   if (runId && thinking) {
@@ -108,9 +120,7 @@ export async function POST(request: Request): Promise<Response> {
 
     return Response.json(result)
   } catch (err) {
-    return Response.json(
-      { error: err instanceof Error ? err.message : 'Verification failed' },
-      { status: 500 }
-    )
+    console.error('[verify] Unexpected error:', err)
+    return Response.json({ error: 'Verification failed' }, { status: 500 })
   }
 }

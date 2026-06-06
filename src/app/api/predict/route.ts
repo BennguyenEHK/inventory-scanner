@@ -2,18 +2,9 @@ import { callModelWithThinking } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
 import { tavilySearch } from '@/lib/tavily'
 import type { VisionResult, PredictionResult } from '@/types'
+import { PREDICT_SYSTEM_PROMPT, buildPredictUserMessage } from '@/prompt/predict'
 
 export const maxDuration = 300
-
-const SYSTEM_PROMPT = `You are a product identification expert with deep knowledge of industrial, commercial, and consumer products.
-
-Given partial product information (manufacturer name, visual description, dimensions, packaging type), use your training knowledge to:
-1. Identify the most likely product line and model
-2. Explain your reasoning step by step
-3. List 2-3 candidate products ranked by likelihood
-4. Return your best prediction as structured JSON
-
-Be clinical and precise. Return JSON only after your reasoning.`
 
 export async function POST(request: Request): Promise<Response> {
   const url = new URL(request.url)
@@ -36,11 +27,11 @@ export async function POST(request: Request): Promise<Response> {
     const { text, thinking } = await callModelWithThinking({
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: JSON.stringify(inputPayload) },
+        { role: 'system', content: PREDICT_SYSTEM_PROMPT },
+        { role: 'user', content: buildPredictUserMessage(inputPayload) },
       ],
       enable_thinking: true,
-      budget_tokens: 8000,
+      budget_tokens: 81_920,
       temperature: 0.2,
     })
 

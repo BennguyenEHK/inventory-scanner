@@ -120,3 +120,16 @@ export async function notionArchive(itemId: string): Promise<void> {
   })
   if (!res.ok) throw new Error(`Notion archive failed: ${res.status}`)
 }
+
+// Full-text search across ItemName, Manufacturer, and itemDescription using Notion OR filter.
+// Useful for Route D inventory check: "do we already have this product?"
+export async function notionSearchByProduct(query: string): Promise<InventoryItem[]> {
+  const filter = {
+    or: [
+      { property: 'ItemName',        rich_text: { contains: query } },
+      { property: 'Manufacturer',    rich_text: { contains: query } },
+      { property: 'itemDescription', rich_text: { contains: query } },
+    ],
+  }
+  return notionQuery(filter)
+}
