@@ -1,4 +1,4 @@
-import { callModel, callModelWithThinking } from '@/lib/inference'
+import { callModel, callModelWithThinking, extractJson } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
 import { notionSearchByProduct } from '@/lib/notion'
 import {
@@ -39,10 +39,8 @@ export async function POST(request: Request): Promise<Response> {
     if (runId && thinking) await publishEvent(runId, { kind: 'thinking', stageId: 3, text: thinking })
 
     let queryUsed = `${vision.brand ?? ''} ${vision.model_number ?? vision.product_category}`.trim()
-    try {
-      const parsed = JSON.parse(turn1Text) as { query: string }
-      if (parsed.query) queryUsed = parsed.query
-    } catch { /* fallback to derived query above */ }
+    const turn1 = extractJson<{ query: string }>(turn1Text)
+    if (turn1?.query) queryUsed = turn1.query
 
     // Execute Notion search with the generated query
     if (runId) await publishEvent(runId, { kind: 'thinking', stageId: 3, text: `Searching database: "${queryUsed}"…` })
@@ -64,11 +62,11 @@ export async function POST(request: Request): Promise<Response> {
       ? `Found ${items.length} matching item(s) in inventory.`
       : 'This product is not currently in inventory.'
     let found = items.length > 0
-    try {
-      const parsed = JSON.parse(conclusionRaw) as { found: boolean; conclusion: string }
-      found = parsed.found ?? found
-      if (parsed.conclusion) conclusion = parsed.conclusion
-    } catch { /* use fallback strings above */ }
+    const turn2 = extractJson<{ found: boolean; conclusion: string }>(conclusionRaw)
+    if (turn2) {
+      found = turn2.found ?? found
+      if (turn2.conclusion) conclusion = turn2.conclusion
+    }
 
     const result: InventoryCheckResult = {
       found,

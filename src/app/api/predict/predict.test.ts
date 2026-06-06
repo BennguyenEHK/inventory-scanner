@@ -79,7 +79,7 @@ describe('POST /api/predict', () => {
       expect.objectContaining({
         model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
         enable_thinking: true,
-        budget_tokens: 8000,
+        budget_tokens: 81_920,
       })
     )
   })

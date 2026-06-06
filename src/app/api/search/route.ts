@@ -1,4 +1,4 @@
-import { callModel } from '@/lib/inference'
+import { callModel, extractJson } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
 import { tavilySearch } from '@/lib/tavily'
 import { firecrawlExtractAll } from '@/lib/firecrawl'
@@ -31,6 +31,12 @@ async function planSearchQueries(
   vision?: VisionResult,
   context?: SearchContext  // pass triedQueries so AI avoids repeating them
 ): Promise<string[]> {
+  // Template fallback — only used if the AI call fails or returns nothing usable
+  const fallback = [
+    `${productName} price buy`,
+    `${productName} supplier cost`,
+    `${productName} buy online USD`,
+  ]
   try {
     let userMessage = buildSearchQueryUserMessage(productName, vision ?? undefined)
 
@@ -48,14 +54,11 @@ async function planSearchQueries(
         { role: 'user', content: userMessage },
       ],
     })
-    const result = JSON.parse(raw) as { queries: string[] }
-    return result.queries
+    const result = extractJson<{ queries: string[] }>(raw)
+    const queries = (result?.queries ?? []).filter(q => typeof q === 'string' && q.trim().length > 0)
+    return queries.length > 0 ? queries : fallback
   } catch {
-    return [
-      `${productName} price buy`,
-      `${productName} supplier cost`,
-      `${productName} buy online USD`,
-    ]
+    return fallback
   }
 }
 
@@ -126,7 +129,19 @@ async function isSufficient(
         },
       ],
     })
-    const result = JSON.parse(raw) as { sufficient: boolean; reason?: string; next_engine?: string }
+    const result = extractJson<{ sufficient: boolean; reason?: string; next_engine?: string }>(raw)
+    if (!result) {
+      // Could not parse — we already passed the ≥5 prices / ≥3 domains guards above,
+      // so accept rather than loop forever burning API calls on an unresponsive evaluator.
+      if (runId) {
+        await publishEvent(runId, {
+          kind: 'search_sufficient',
+          sufficient: true,
+          reason: 'auto-accepted (evaluator returned no verdict)',
+        })
+      }
+      return { sufficient: true }
+    }
     if (runId) {
       await publishEvent(runId, {
         kind: 'search_sufficient',
@@ -176,14 +191,20 @@ export async function POST(request: Request): Promise<Response> {
 
       if (runId) await publishEvent(runId, { kind: 'search_query', attempt: attempt + 1, query })
 
-      // Decide which engines to use based on AI recommendation from previous attempt
-      const useShoppingApi = attempt > 0 && (nextEngine === 'serpapi_shopping' || nextEngine === 'both')
+      // Engine selection: Tavily always runs; Shopping runs on attempt 0 (high-signal direct
+      // prices) and whenever the sufficiency evaluator recommends it for the next attempt.
+      const useShoppingApi = attempt === 0 || nextEngine === 'serpapi_shopping' || nextEngine === 'both'
       const useTavily = attempt === 0 || nextEngine === 'tavily' || nextEngine === 'both' || !nextEngine
 
-      // Run engines in parallel (Shopping API returns prices directly — skip Firecrawl for those)
+      // Run engines in parallel, each isolated — one engine erroring (bad key, quota,
+      // network) must NOT abort the whole search. Shopping returns prices directly (no Firecrawl).
       const [tavilyResults, shoppingPrices] = await Promise.all([
-        useTavily ? tavilySearch(query, 8) : Promise.resolve([]),
-        useShoppingApi ? serpApiShoppingSearch(query) : Promise.resolve([]),
+        useTavily
+          ? tavilySearch(query, 8).catch(e => { console.error('[search] Tavily failed:', e); return [] })
+          : Promise.resolve([]),
+        useShoppingApi
+          ? serpApiShoppingSearch(query).catch(e => { console.error('[search] SerpAPI Shopping failed:', e); return [] })
+          : Promise.resolve([]),
       ])
 
       if (runId) await publishEvent(runId, {

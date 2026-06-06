@@ -121,14 +121,14 @@ describe('api/vision/route', () => {
     expect(data.route.message).toContain('Image unclear')
   })
 
-  it('returns 500 when images array is missing', async () => {
+  it('returns 400 when images array is missing', async () => {
     const request = new Request('http://localhost:3000/api/vision', {
       method: 'POST',
       body: JSON.stringify({}),
     })
 
     const response = await POST(request)
-    expect(response.status).toBe(500)
+    expect(response.status).toBe(400)
   })
 
   it('handles model output parsing errors gracefully', async () => {

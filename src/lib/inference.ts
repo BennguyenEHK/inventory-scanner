@@ -27,6 +27,23 @@ export function extractThinking(raw: string): { thinking: string | null; text: s
   return { thinking, text }
 }
 
+// Robustly extract a JSON object from raw model output. Returns null on failure
+// (never throws). Handles leftover <think> blocks, markdown code fences, and
+// prose preambles — so a minor formatting slip never triggers a silent fallback.
+export function extractJson<T>(raw: string): T | null {
+  const cleaned = stripThinking(raw).trim()
+  // Fast path — already clean JSON
+  try { return JSON.parse(cleaned) as T } catch { /* fall through */ }
+  // Strip markdown fences, then slice the outermost {...} object
+  const noFence = cleaned.replace(/```(?:json)?/gi, '')
+  const start = noFence.indexOf('{')
+  const end = noFence.lastIndexOf('}')
+  if (start !== -1 && end > start) {
+    try { return JSON.parse(noFence.slice(start, end + 1)) as T } catch { /* fall through */ }
+  }
+  return null
+}
+
 // Normalises provider-specific thinking fields into a single string.
 // Featherless/HF may put reasoning in `reasoning_content` instead of <think> tags.
 function buildRawContent(
@@ -172,11 +189,16 @@ async function getModelContent(params: CallModelParams): Promise<string> {
   // NON-VISION path: HF → RunPod
   // resolvedMaxTokens = budget_tokens when thinking is on (thinking + answer share this budget),
   // or max_tokens for standard calls. The model self-terminates <think> when done — no buffer needed.
-  // NOTE: thinking_budget is vLLM-only (local inference). HF/Featherless OpenAI-compatible API
-  // only supports enable_thinking in chat_template_kwargs — adding thinking_budget causes HTTP 400.
-  const payload: Record<string, unknown> = { model, messages, temperature, max_tokens: resolvedMaxTokens }
-  if (enable_thinking) {
-    payload.chat_template_kwargs = { enable_thinking: true }
+  // CRITICAL: Qwen3.6 defaults to thinking ON, so we must ALWAYS send the explicit boolean.
+  // Omitting it on "non-thinking" calls left the model thinking, truncating its JSON within the
+  // small max_tokens → unparseable output → silent fallbacks (poor queries, dead engine-switching).
+  // NOTE: thinking_budget is vLLM-only — HF/Featherless only accepts enable_thinking here.
+  const payload: Record<string, unknown> = {
+    model,
+    messages,
+    temperature,
+    max_tokens: resolvedMaxTokens,
+    chat_template_kwargs: { enable_thinking },
   }
 
   const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'

@@ -63,7 +63,8 @@ export async function POST(request: Request): Promise<Response> {
     try {
       vision = JSON.parse(raw) as VisionResult
     } catch {
-      return Response.json({ error: 'Vision model returned unparseable output' }, { status: 502 })
+      // Model returned non-JSON — treat as a processing failure (consistent with /api/predict)
+      return Response.json({ error: 'Vision model returned unparseable output' }, { status: 500 })
     }
     if (!vision.visual_description) vision.visual_description = 'No description available'
     const route = visionRouter(vision)

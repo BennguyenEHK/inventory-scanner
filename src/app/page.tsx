@@ -47,6 +47,9 @@ export default function ScanPage() {
   const [report, setReport] = useState<FinalReport | null>(null)
   const [saving, setSaving] = useState(false)
   const [pendingPrompt, setPendingPrompt] = useState<string>('')
+  // True while the pipeline is paused waiting for the user to confirm a low-confidence prediction.
+  // Must enable the command bar (otherwise the user can't type yes/no and the pipeline hangs).
+  const [awaitingConfirm, setAwaitingConfirm] = useState(false)
   const streamEndRef = useRef<HTMLDivElement>(null)
   const runIdRef = useRef<string>('')
   const esRef = useRef<EventSource | null>(null)
@@ -106,6 +109,10 @@ export default function ScanPage() {
   }
 
   const reset = () => {
+    // Resolve any pending confirmation so a paused pipeline promise never leaks
+    confirmResolveRef.current?.(false)
+    confirmResolveRef.current = null
+    setAwaitingConfirm(false)
     esRef.current?.close()
     setStream([])
     setAppState('capture')
@@ -217,10 +224,12 @@ export default function ScanPage() {
             kind: 'clarification',
             message: `⚠️ Low confidence (${(prediction.prediction.prediction_confidence * 100).toFixed(0)}%) — I think this is "${productName}". Type "yes" to confirm and continue searching, or "no" to rescan.`,
           })
+          setAwaitingConfirm(true)  // enable the command bar so the user can answer
           const confirmed = await new Promise<boolean>(resolve => {
             confirmResolveRef.current = resolve
           })
           confirmResolveRef.current = null
+          setAwaitingConfirm(false)
           if (!confirmed) {
             setAppState('capture')
             esRef.current?.close()
@@ -480,8 +489,12 @@ export default function ScanPage() {
         <CommandBar
           onCommand={handleCommand}
           onCameraOpen={() => setCameraOpen(true)}
-          placeholder={appState === 'report' ? '"save qty 50" or speak…' : 'Tap 📷 to scan, or type a command…'}
-          disabled={isRunning}
+          placeholder={
+            awaitingConfirm ? 'Type "yes" to confirm or "no" to rescan…'
+            : appState === 'report' ? '"save qty 50" or speak…'
+            : 'Tap 📷 to scan, or type a command…'
+          }
+          disabled={isRunning && !awaitingConfirm}
         />
       </div>
     </>

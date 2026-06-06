@@ -66,7 +66,7 @@ describe('ChatBubble logic', () => {
   })
 
   it('photos bubble: count label is plural for multiple photos', () => {
-    const count = 3
+    const count: number = 3
     const label = `${count} photo${count !== 1 ? 's' : ''} captured`
     expect(label).toBe('3 photos captured')
   })
