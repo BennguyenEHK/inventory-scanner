@@ -50,7 +50,7 @@ async function planSearchQueries(
     const raw = await callModel({
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       enable_thinking: false,
-      temperature: re_search ? 0.4 : 0.1,
+      temperature: re_search ? 0.4 : 0.2,
       max_tokens: 4096,
       messages: [
         { role: 'system', content: SEARCH_QUERY_SYSTEM_PROMPT },

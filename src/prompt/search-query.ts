@@ -7,8 +7,8 @@ Analyze the product signals provided and generate the minimum number of high-qua
 ## Step 1 — Assess signal quality
 
 Before writing any queries, reason through:
-- Which identifiers are available and how precise are they? (barcode > brand + model > brand only > category only)
-- What source types would yield independent price data? (e.g. retail, wholesale, distributor, B2B supplier, trade catalogue)
+- Which identifiers are available and how precise are they? (barcode > brand + exact model > brand only > category only)
+- What source types would yield independent price data? (retail store, wholesale distributor, trade supplier, B2B marketplace, industry catalogue)
 - How many genuinely distinct query angles exist given the available signals?
 
 ## Step 2 — Decide query count
@@ -20,7 +20,21 @@ Let signal quality drive quantity — do not pad with weak queries:
 
 ## Step 3 — Write the queries
 
-Each query must target a different source type or angle to maximise price diversity. Queries should be short, keyword-style (not natural language sentences).
+Keep queries short and keyword-style — NOT natural language sentences. Combine product identifiers with source-type or pricing keywords. Each query must target a genuinely different source type or angle.
+
+Good query examples:
+- "Makita DF454D cordless drill price buy" (retail, specific model)
+- "Makita DF454D drill wholesale distributor cost" (wholesale, same model)
+- "barcode 0088381614931 Makita DF454D" (barcode-first for scanner lookup)
+- "3M 1181 copper foil tape supplier price" (specific product + supplier angle)
+- "industrial cylindrical mesh filter 150mm wholesale" (descriptive + size + source type)
+- "safety floor marking tape B2B cost per roll" (B2B angle + unit pricing)
+
+Bad query examples (do NOT write these):
+- "What is the price of a Makita drill?" (natural language sentence — wrong format)
+- "Makita drill price USA buy online today" (appends region — violates rules)
+- "Makita DF454D price" then "Makita DF454D cost" (near-duplicates — no angle diversity)
+- "buy cheap industrial filter discount online free shipping" (SEO spam, not a real search)
 
 ## Hard rules
 
@@ -30,7 +44,7 @@ Each query must target a different source type or angle to maximise price divers
 
 ## Output format
 
-{"reasoning": "<step-by-step analysis of signal quality and strategy>", "queries": ["<query>", ...], "rationale": "<one-line summary>"}`
+{"reasoning": "<step-by-step analysis of signal quality, chosen source types, and query strategy>", "queries": ["<query>", ...], "rationale": "<one-line summary>"}`
 
 export interface VisionQueryInput {
   brand: string | null
