@@ -14,7 +14,7 @@ Before writing any queries, reason through:
 ## Step 2 — Decide query count
 
 Let signal quality drive quantity — do not pad with weak queries:
-- Strong signal (barcode or brand + exact model): 1–2 precise queries are sufficient
+- Strong signal (barcode or brand + exact model + catergory): 1–2 precise queries are sufficient
 - Medium signal (brand + category, or partial model): 2–3 queries covering different source types
 - Weak signal (category and description only): 3–5 queries spanning different source types and descriptive angles
 
