@@ -25,7 +25,7 @@ function banner(title) {
 }
 
 async function callHF(model, messages, options = {}) {
-  const body = { model, messages, max_tokens: 256, temperature: 0.1, ...options }
+  const body = { model, messages, max_tokens: 4096, temperature: 0.1, ...options }
   const res = await fetch(HF_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${HF_TOKEN}` },

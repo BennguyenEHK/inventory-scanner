@@ -163,7 +163,7 @@ async function getModelContent(params: CallModelParams): Promise<string> {
     if (geminiResult) return geminiResult
     console.error('[inference] Gemini failed → HF vision fallback')
 
-    const hfPayload = { model: HF_VISION_FALLBACK_MODEL, messages, temperature, max_tokens: resolvedMaxTokens }
+    const hfPayload = { model: HF_VISION_FALLBACK_MODEL, messages, temperature, max_tokens: Math.min(resolvedMaxTokens, 4096) }
     const hfUrl   = process.env.HF_BASE_URL ?? 'https://router.huggingface.co/v1/chat/completions'
     const hfToken = process.env.HF_TOKEN ?? process.env.HF_API_KEY
     try {
@@ -197,7 +197,7 @@ async function getModelContent(params: CallModelParams): Promise<string> {
     model,
     messages,
     temperature,
-    max_tokens: resolvedMaxTokens,
+    max_tokens: Math.min(resolvedMaxTokens, 4096),
     chat_template_kwargs: { enable_thinking },
   }
 

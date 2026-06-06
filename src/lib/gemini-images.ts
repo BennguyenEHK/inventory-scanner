@@ -55,7 +55,7 @@ export async function validateProductImages(
   const raw = await callModel({
     model: 'gemini-2.5-flash',
     temperature: 0.1,
-    max_tokens: 64,
+    max_tokens: 4096,
     messages: [{
       role: 'user',
       content: [

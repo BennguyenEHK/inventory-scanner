@@ -12,7 +12,7 @@ const BASE_PARAMS = {
   enable_thinking: true as const,
   budget_tokens: 81_920,
   temperature: 0.1,
-  max_tokens: 2048,
+  max_tokens: 4096,
 }
 
 function normalizeCheckpoint(text: string, checkpoint: 1 | 2 | 3): CheckpointResult {

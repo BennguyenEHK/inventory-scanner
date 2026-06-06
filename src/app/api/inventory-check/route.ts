@@ -51,7 +51,7 @@ export async function POST(request: Request): Promise<Response> {
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       enable_thinking: false,
       temperature: 0.1,
-      max_tokens: 256,
+      max_tokens: 4096,
       messages: [
         { role: 'system', content: INVENTORY_CHECK_CONCLUSION_PROMPT },
         { role: 'user', content: buildInventoryCheckConclusionMessage(queryUsed, items) },

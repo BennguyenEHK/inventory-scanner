@@ -48,7 +48,7 @@ async function planSearchQueries(
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       enable_thinking: false,
       temperature: 0.1,
-      max_tokens: 512,
+      max_tokens: 4096,
       messages: [
         { role: 'system', content: SEARCH_QUERY_SYSTEM_PROMPT },
         { role: 'user', content: userMessage },
@@ -110,7 +110,7 @@ async function isSufficient(
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
       enable_thinking: false,
       temperature: 0.1,
-      max_tokens: 256,
+      max_tokens: 4096,
       messages: [
         { role: 'system', content: SEARCH_SUFFICIENCY_SYSTEM_PROMPT },
         {
