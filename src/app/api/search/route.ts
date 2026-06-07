@@ -1,8 +1,9 @@
 import { callModel, extractJson } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
-import { tavilySearch } from '@/lib/tavily'
-import { firecrawlExtractAll } from '@/lib/firecrawl'
-import { serpApiShoppingSearch } from '@/lib/serpapi'
+import { redis } from '@/lib/redis'
+import { tavilySearch } from '@/lib/tavily'          // now backed by Serper organic
+import { firecrawlExtractAll } from '@/lib/firecrawl' // now backed by Jina 4-layer cascade
+import { serpApiShoppingSearch } from '@/lib/serpapi'  // now backed by Serper shopping
 import { SEARCH_QUERY_SYSTEM_PROMPT, buildSearchQueryUserMessage, type ReSearchContext } from '@/prompt/search-query'
 import { SEARCH_SUFFICIENCY_SYSTEM_PROMPT, buildSufficiencyUserMessage } from '@/prompt/search-sufficiency'
 import type { PriceSource, SearchResult, VisionResult, SearchContext } from '@/types'
@@ -172,6 +173,14 @@ export async function POST(request: Request): Promise<Response> {
     // Truncate product name to prevent prompt injection / oversized AI calls
     const productName = typeof rawName === 'string' ? rawName.slice(0, 200) : 'Unknown Product'
 
+    // Redis cache: skip entire pipeline on hit
+    const cacheKey = `search:v2:${productName}:${visionCtx?.barcode ?? 'no-barcode'}`
+    const cached = await redis.get<SearchResult>(cacheKey).catch(() => null)
+    if (cached) {
+      if (runId) await publishEvent(runId, { kind: 'search_cache_hit', cacheKey })
+      return Response.json(cached)
+    }
+
     // Build initial context (merge with incoming if re-search)
     const ctx: SearchContext = incomingContext ?? {
       triedQueries: [],
@@ -203,37 +212,31 @@ export async function POST(request: Request): Promise<Response> {
 
       if (runId) await publishEvent(runId, { kind: 'search_query', attempt: attempt + 1, query })
 
-      // Engine selection: Tavily always runs; Shopping runs on attempt 0 (high-signal direct
-      // prices) and whenever the sufficiency evaluator recommends it for the next attempt.
+      // Shopping-first: attempt 0 skips organic entirely.
+      // Organic (Serper → Jina cascade) is expensive — only run when shopping is insufficient.
       const useShoppingApi = attempt === 0 || nextEngine === 'serpapi_shopping' || nextEngine === 'both'
-      const useTavily = attempt === 0 || nextEngine === 'tavily' || nextEngine === 'both' || !nextEngine
+      const useOrganic = attempt > 0 || nextEngine === 'tavily' || nextEngine === 'both'
 
       // Run engines in parallel, each isolated — one engine erroring (bad key, quota,
-      // network) must NOT abort the whole search. Shopping returns prices directly (no Firecrawl).
-      const [tavilyResults, shoppingPrices] = await Promise.all([
-        useTavily
-          ? tavilySearch(query, 8).catch(e => { console.error('[search] Tavily failed:', e); return [] })
+      // network) must NOT abort the whole search. Shopping returns prices directly (no cascade).
+      const [organicResults, shoppingPrices] = await Promise.all([
+        useOrganic
+          ? tavilySearch(query).catch(e => { console.error('[search] Serper organic failed:', e); return [] })
           : Promise.resolve([]),
         useShoppingApi
-          ? serpApiShoppingSearch(query).catch(e => { console.error('[search] SerpAPI Shopping failed:', e); return [] })
+          ? serpApiShoppingSearch(query).catch(e => { console.error('[search] Serper shopping failed:', e); return [] })
           : Promise.resolve([]),
       ])
 
-      if (runId) await publishEvent(runId, {
-        kind: 'search_tavily',
-        count: tavilyResults.length,
-        urls: tavilyResults.map(r => r.url),
-      })
-
-      // Filter out excluded domains before scraping
-      const urlsToScrape = tavilyResults
-        .map(r => r.url)
-        .filter(u => {
-          try { return !ctx.excludedDomains.includes(new URL(u).hostname) } catch { return false }
+      // Pass snippet alongside URL so L1 regex runs for free before any Jina fetch
+      const organicItems = organicResults
+        .filter(r => {
+          try { return !ctx.excludedDomains.includes(new URL(r.url).hostname) } catch { return false }
         })
+        .map(r => ({ url: r.url, snippet: r.content }))
 
-      if (runId) await publishEvent(runId, { kind: 'search_firecrawl', urlCount: urlsToScrape.length })
-      const scraped = await firecrawlExtractAll(urlsToScrape)
+      if (runId) await publishEvent(runId, { kind: 'search_organic', urlCount: organicItems.length })
+      const scraped = await firecrawlExtractAll(organicItems, visionCtx)
 
       // Merge: scraped organic + direct shopping prices
       prices = deduplicate([...prices, ...scraped, ...shoppingPrices])
@@ -276,6 +279,11 @@ export async function POST(request: Request): Promise<Response> {
       contaminated_removed: removed,
       context_for_retry: contextForRetry,
     }
+
+    // Cache successful result for 24 hours
+    await redis.set(cacheKey, result, { ex: 86400 }).catch(e => {
+      console.warn('[search] Redis write failed (non-blocking):', e)
+    })
 
     return Response.json(result)
   } catch (err) {

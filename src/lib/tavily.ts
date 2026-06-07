@@ -1,3 +1,6 @@
+// Delegates to Serper.dev organic search — interface unchanged for route.ts.
+import { serperOrganicSearch } from './serper'
+
 export interface TavilyResult {
   url: string
   title: string
@@ -10,41 +13,13 @@ export interface TavilyImageResult {
   description?: string
 }
 
-export async function tavilySearch(
-  query: string,
-  maxResults = 8
-): Promise<TavilyResult[]> {
-  const res = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: process.env.TAVILY_API_KEY,
-      query,
-      max_results: maxResults,
-      search_depth: 'basic',
-    }),
-  })
-  if (!res.ok) throw new Error(`Tavily search failed: ${res.status}`)
-  const data = await res.json() as { results: TavilyResult[] }
-  return data.results
+export async function tavilySearch(query: string): Promise<TavilyResult[]> {
+  const results = await serperOrganicSearch(query)
+  // score=1 placeholder — route.ts uses url/content, not score
+  return results.map(r => ({ url: r.url, title: r.title, content: r.snippet, score: 1 }))
 }
 
-export async function tavilyImageSearch(
-  query: string,
-  maxResults = 3
-): Promise<TavilyImageResult[]> {
-  const res = await fetch('https://api.tavily.com/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      api_key: process.env.TAVILY_API_KEY,
-      query,
-      max_results: maxResults,
-      include_images: true,
-      search_depth: 'basic',
-    }),
-  })
-  if (!res.ok) throw new Error(`Tavily image search failed: ${res.status}`)
-  const data = await res.json() as { images?: TavilyImageResult[] }
-  return data.images ?? []
+// Serper.dev has no dedicated image search — return empty to avoid breaking callers.
+export async function tavilyImageSearch(): Promise<TavilyImageResult[]> {
+  return []
 }

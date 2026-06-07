@@ -1,26 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Firecrawl } from 'firecrawl'
-import { firecrawlExtract, firecrawlExtractAll, firecrawlExtractImages, isProductImage, isScrapeable } from './firecrawl'
-
-// vi.hoisted ensures mockScrape exists when vi.mock factory runs (vi.mock is hoisted above imports)
-const mockScrape = vi.hoisted(() => vi.fn())
-
-// SDK uses axios internally — mock the module, not global.fetch.
-// Must use a regular function (not arrow) so `new Firecrawl()` works as a constructor.
-vi.mock('firecrawl', () => ({
-  Firecrawl: vi.fn().mockImplementation(function () {
-    return { scrape: mockScrape }
-  }),
-}))
-
-beforeEach(() => {
-  process.env.FIRECRAWL_API_KEY = 'test-key-123'
-})
-
-afterEach(() => {
-  delete process.env.FIRECRAWL_API_KEY
-  vi.clearAllMocks()
-})
+import { describe, it, expect } from 'vitest'
+import { isProductImage, isScrapeable, firecrawlExtractImages, buildPriceSourceFromFields } from './firecrawl'
+import type { ExtractedFields } from './extract-regex'
 
 describe('isScrapeable', () => {
   it('allows normal e-commerce URLs', () => {
@@ -48,142 +28,6 @@ describe('isScrapeable', () => {
   it('returns false for malformed URLs', () => {
     expect(isScrapeable('not-a-url')).toBe(false)
     expect(isScrapeable('')).toBe(false)
-  })
-})
-
-describe('firecrawlExtract', () => {
-  it('calls scrape with json format, schema, and prompt', async () => {
-    mockScrape.mockResolvedValueOnce({ json: { price: 10, currency: 'USD' } })
-
-    await firecrawlExtract('https://example.com/product')
-
-    expect(mockScrape).toHaveBeenCalledWith('https://example.com/product', {
-      formats: [expect.objectContaining({
-        type: 'json',
-        schema: expect.any(Object),
-        prompt: expect.any(String),
-      })],
-    })
-  })
-
-  it('instantiates Firecrawl with the API key from env', async () => {
-    mockScrape.mockResolvedValueOnce({ json: { price: 10, currency: 'USD' } })
-
-    await firecrawlExtract('https://example.com/product')
-
-    expect(vi.mocked(Firecrawl)).toHaveBeenCalledWith({ apiKey: 'test-key-123' })
-  })
-
-  it('extracts price data from a valid response', async () => {
-    mockScrape.mockResolvedValueOnce({
-      json: { price: 12.99, currency: 'USD', unit: 'each', source: 'Amazon', in_stock: true },
-    })
-
-    const result = await firecrawlExtract('https://amazon.com/product')
-    expect(result).toEqual({
-      name: 'Amazon',
-      url: 'https://amazon.com/product',
-      price: 12.99,
-      currency: 'USD',
-      unit: 'each',
-      in_stock: true,
-    })
-  })
-
-  it('returns null when scrape returns no json field', async () => {
-    mockScrape.mockResolvedValueOnce({ markdown: '# Product page' })
-    expect(await firecrawlExtract('https://example.com/product')).toBeNull()
-  })
-
-  it('returns null when price is missing', async () => {
-    mockScrape.mockResolvedValueOnce({ json: { currency: 'USD', unit: 'each' } })
-    expect(await firecrawlExtract('https://example.com/product')).toBeNull()
-  })
-
-  it('returns null when scrape throws (e.g. 400 / 429)', async () => {
-    mockScrape.mockRejectedValueOnce(new Error('Bad Request'))
-    expect(await firecrawlExtract('https://example.com/product')).toBeNull()
-  })
-
-  it('defaults to hostname when source name is absent', async () => {
-    mockScrape.mockResolvedValueOnce({ json: { price: 5.50, currency: 'USD', unit: 'roll' } })
-    const result = await firecrawlExtract('https://retailer.com/product')
-    expect(result?.name).toBe('retailer.com')
-  })
-
-  it('throws if FIRECRAWL_API_KEY is not set', async () => {
-    delete process.env.FIRECRAWL_API_KEY
-    await expect(firecrawlExtract('https://example.com/product')).rejects.toThrow(
-      'FIRECRAWL_API_KEY not set'
-    )
-  })
-})
-
-describe('firecrawlExtractAll', () => {
-  it('skips unscrapeable URLs without calling scrape', async () => {
-    mockScrape.mockResolvedValueOnce({
-      json: { price: 10.0, currency: 'USD', unit: 'each', source: 'Store A', in_stock: true },
-    })
-
-    const results = await firecrawlExtractAll([
-      'https://store-a.com/product',
-      'https://www.linkedin.com/in/someone',
-      'https://www.youtube.com/watch?v=abc',
-      'https://example.com/catalogue.pdf',
-    ])
-
-    expect(mockScrape).toHaveBeenCalledTimes(1)
-    expect(results).toHaveLength(1)
-    expect(results[0].price).toBe(10.0)
-  })
-
-  it('processes URLs in batches of 3', async () => {
-    for (let i = 1; i <= 7; i++) {
-      mockScrape.mockResolvedValueOnce({ json: { price: i * 1.0, currency: 'USD', unit: 'each' } })
-    }
-
-    const urls = Array.from({ length: 7 }, (_, i) => `https://store.com/product-${i + 1}`)
-    const results = await firecrawlExtractAll(urls)
-
-    expect(mockScrape).toHaveBeenCalledTimes(7)
-    expect(results).toHaveLength(7)
-  })
-
-  it('filters out null results', async () => {
-    mockScrape
-      .mockResolvedValueOnce({ json: { price: 10.0, currency: 'USD', unit: 'each', source: 'Store A' } })
-      .mockResolvedValueOnce({ markdown: 'no price here' })
-
-    const results = await firecrawlExtractAll([
-      'https://store-a.com/product',
-      'https://invalid.com/product',
-    ])
-
-    expect(results).toHaveLength(1)
-    expect(results[0].price).toBe(10.0)
-  })
-
-  it('returns empty array if all extractions fail', async () => {
-    mockScrape
-      .mockRejectedValueOnce(new Error('fail'))
-      .mockRejectedValueOnce(new Error('fail'))
-
-    const results = await firecrawlExtractAll([
-      'https://invalid1.com/product',
-      'https://invalid2.com/product',
-    ])
-
-    expect(results).toHaveLength(0)
-  })
-
-  it('returns empty array if all URLs are unscrapeable', async () => {
-    const results = await firecrawlExtractAll([
-      'https://linkedin.com/in/a',
-      'https://youtube.com/watch?v=b',
-      'https://example.com/file.pdf',
-    ])
-    expect(mockScrape).not.toHaveBeenCalled()
-    expect(results).toHaveLength(0)
   })
 })
 
@@ -218,38 +62,33 @@ describe('isProductImage', () => {
 })
 
 describe('firecrawlExtractImages', () => {
-  it('returns image URLs from a page', async () => {
-    mockScrape.mockResolvedValueOnce({
-      images: [
-        'https://store.com/product.jpg',
-        'https://store.com/logo.png',
-        'https://store.com/detail.webp',
-      ],
-    })
+  it('always returns empty array (Firecrawl removed — image pipeline uses vision stage)', async () => {
+    expect(await firecrawlExtractImages()).toEqual([])
+  })
+})
 
-    const result = await firecrawlExtractImages('https://store.com/product-page')
-    expect(result).toEqual([
-      'https://store.com/product.jpg',
-      'https://store.com/logo.png',
-      'https://store.com/detail.webp',
-    ])
-    expect(mockScrape).toHaveBeenCalledWith('https://store.com/product-page', {
-      formats: ['images'],
-    })
+describe('buildPriceSourceFromFields', () => {
+  it('maps ExtractedFields to PriceSource', () => {
+    const fields: ExtractedFields = {
+      price: 49.99, currency: 'AUD', unit: 'each', in_stock: true,
+      manufacturer: 'Makita', itemDescription: 'Cordless drill',
+      length: '80 mm', width: '40 mm', items_origin: 'Japan',
+    }
+    const source = buildPriceSourceFromFields(
+      fields, 'Bunnings', 'https://bunnings.com.au/p/1', false,
+    )
+    expect(source).not.toBeNull()
+    expect(source!.price).toBe(49.99)
+    expect(source!.manufacturer).toBe('Makita')
+    expect(source!.items_origin).toBe('Japan')
+    expect(source!.manufacturer_flagged).toBe(false)
   })
 
-  it('returns empty array when page has no images', async () => {
-    mockScrape.mockResolvedValueOnce({ markdown: '# Page' })
-    expect(await firecrawlExtractImages('https://example.com')).toEqual([])
-  })
-
-  it('returns empty array when scrape throws', async () => {
-    mockScrape.mockRejectedValueOnce(new Error('network error'))
-    expect(await firecrawlExtractImages('https://example.com')).toEqual([])
-  })
-
-  it('returns empty array when FIRECRAWL_API_KEY is missing', async () => {
-    delete process.env.FIRECRAWL_API_KEY
-    expect(await firecrawlExtractImages('https://example.com')).toEqual([])
+  it('returns null when price is missing', () => {
+    const fields: ExtractedFields = {
+      price: null, currency: 'AUD', unit: 'each', in_stock: null,
+      manufacturer: null, itemDescription: null, length: null, width: null, items_origin: null,
+    }
+    expect(buildPriceSourceFromFields(fields, 'Test', 'https://test.com', false)).toBeNull()
   })
 })

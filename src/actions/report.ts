@@ -4,7 +4,7 @@ import { selectProductImages } from '@/lib/image-pipeline'
 import { generateItemId } from '@/lib/itemId'
 import type {
   VisionResult, PredictionResult, SearchResult,
-  CheckpointResult, InventoryItem, FinalReport,
+  CheckpointResult, InventoryItem, FinalReport, PriceSource,
 } from '@/types'
 
 function assembleNotes(search: SearchResult, flags: string[]): string {
@@ -36,18 +36,25 @@ export async function assembleReport(params: {
   // Guard against NaN/Infinity from corrupted model outputs
   const safeAvg = Number.isFinite(search.avg) ? search.avg : 0
 
+  // Find the first source with each optional field
+  const firstWith = <K extends keyof PriceSource>(key: K) =>
+    search.sources.find(s => s[key] != null)?.[key]
+
   const item: InventoryItem = {
     itemId:          generateItemId(),
     ItemName:        productName,
     itemDescription: `${vision.product_category} — ${vision.color} ${vision.shape}`,
     Qty:             null,
-    Manufacturer:    vision.brand ?? prediction?.prediction.manufacturer ?? '',
-    Length:          dims[0] ?? '',
-    Width:           dims[1] ?? '',
+    Manufacturer:    vision.brand
+                     ?? prediction?.prediction.manufacturer
+                     ?? firstWith('manufacturer') as string | undefined
+                     ?? '',
+    Length:          dims[0] ?? firstWith('length') as string | undefined ?? '',
+    Width:           dims[1] ?? firstWith('width')  as string | undefined ?? '',
     Market_Price:    safeAvg,
     Currency:        search.currency,
     Sales_Unit:      search.sources[0]?.unit ?? 'Each',
-    Item_Origin:     '',
+    Item_Origin:     firstWith('items_origin') as string | undefined ?? '',
     Ext_Price:       null,
     Notes:           assembleNotes(search, flags),
   }

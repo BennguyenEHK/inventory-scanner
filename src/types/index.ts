@@ -64,6 +64,13 @@ export interface PriceSource {
   currency: string
   unit: string
   in_stock?: boolean
+  // v2: expanded extraction fields
+  manufacturer?: string
+  itemDescription?: string
+  length?: string
+  width?: string
+  items_origin?: string
+  manufacturer_flagged?: boolean
 }
 
 export interface SearchResult {
@@ -85,6 +92,12 @@ export interface SerpApiResult {
   title: string
   content: string
   source?: string
+}
+
+export interface SerperOrganicResult {
+  url: string
+  title: string
+  snippet: string
 }
 
 // Stage 4 — Verification

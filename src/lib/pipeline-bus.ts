@@ -6,11 +6,13 @@ const KEY = (runId: string) => `pipeline:${runId}`
 const TTL = 3600 // 1 hour
 
 export type BusEvent =
-  | { kind: 'thinking';         stageId: number; cp?: 1 | 2; text: string }
-  | { kind: 'search_query';     attempt: number; query: string }
-  | { kind: 'search_tavily';    count: number; urls: string[] }
-  | { kind: 'search_firecrawl'; urlCount: number }
-  | { kind: 'search_prices';    newCount: number; totalCount: number }
+  | { kind: 'thinking';          stageId: number; cp?: 1 | 2; text: string }
+  | { kind: 'search_query';      attempt: number; query: string }
+  | { kind: 'search_cache_hit';  cacheKey: string }
+  | { kind: 'search_tavily';     count: number; urls: string[] }
+  | { kind: 'search_organic';    urlCount: number }
+  | { kind: 'search_firecrawl';  urlCount: number }
+  | { kind: 'search_prices';     newCount: number; totalCount: number }
   | { kind: 'search_sufficient'; sufficient: boolean; reason?: string }
   | { kind: 'done' }
 
@@ -45,10 +47,14 @@ export function busEventToLine(event: BusEvent): { stageId: number; line: string
     }
     case 'search_query':
       return { stageId: 3, line: `🔍 Attempt ${event.attempt}: "${event.query}"` }
+    case 'search_cache_hit':
+      return { stageId: 3, line: `⚡ Cache hit — skipping search pipeline` }
     case 'search_tavily':
-      return { stageId: 3, line: `📡 Tavily → ${event.count} URL${event.count !== 1 ? 's' : ''} found` }
+      return { stageId: 3, line: `📡 Serper organic → ${event.count} URL${event.count !== 1 ? 's' : ''} found` }
+    case 'search_organic':
+      return { stageId: 3, line: `🌐 Organic → scraping ${event.urlCount} page${event.urlCount !== 1 ? 's' : ''}` }
     case 'search_firecrawl':
-      return { stageId: 3, line: `🔧 Firecrawl → scraping ${event.urlCount} page${event.urlCount !== 1 ? 's' : ''}` }
+      return { stageId: 3, line: `🔧 Extraction → scraping ${event.urlCount} page${event.urlCount !== 1 ? 's' : ''}` }
     case 'search_prices':
       return { stageId: 3, line: `💰 +${event.newCount} prices (${event.totalCount} total)` }
     case 'search_sufficient':
