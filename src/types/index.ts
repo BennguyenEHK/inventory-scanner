@@ -86,14 +86,6 @@ export interface SearchResult {
   context_for_retry?: SearchContext  // context for client to pass on re-search if CP2 fails
 }
 
-// SerpAPI organic/shopping result shape
-export interface SerpApiResult {
-  url: string
-  title: string
-  content: string
-  source?: string
-}
-
 export interface SerperOrganicResult {
   url: string
   title: string

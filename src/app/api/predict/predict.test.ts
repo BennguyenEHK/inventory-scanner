@@ -3,7 +3,7 @@ import { POST } from './route'
 import type { VisionResult, PredictionResult } from '@/types'
 
 vi.mock('@/lib/inference')
-vi.mock('@/lib/tavily')
+vi.mock('@/lib/serper')
 vi.mock('@/lib/pipeline-bus', () => ({ publishEvent: vi.fn() }))
 
 const mockVision: VisionResult = {
@@ -46,9 +46,9 @@ describe('POST /api/predict', () => {
 
   it('returns prediction wrapped in route response', async () => {
     const { callModelWithThinking } = await import('@/lib/inference')
-    const { tavilySearch } = await import('@/lib/tavily')
+    const { serperOrganicSearch } = await import('@/lib/serper')
     vi.mocked(callModelWithThinking).mockResolvedValueOnce({ text: JSON.stringify(mockPrediction), thinking: null })
-    vi.mocked(tavilySearch).mockResolvedValueOnce([])
+    vi.mocked(serperOrganicSearch).mockResolvedValueOnce([])
 
     const req = new Request('http://localhost/api/predict', {
       method: 'POST',
@@ -66,9 +66,9 @@ describe('POST /api/predict', () => {
 
   it('calls Qwen3.6-35B-A3B with thinking enabled', async () => {
     const { callModelWithThinking } = await import('@/lib/inference')
-    const { tavilySearch } = await import('@/lib/tavily')
+    const { serperOrganicSearch } = await import('@/lib/serper')
     vi.mocked(callModelWithThinking).mockResolvedValueOnce({ text: JSON.stringify(mockPrediction), thinking: null })
-    vi.mocked(tavilySearch).mockResolvedValueOnce([])
+    vi.mocked(serperOrganicSearch).mockResolvedValueOnce([])
 
     await POST(new Request('http://localhost/api/predict', {
       method: 'POST',
@@ -84,11 +84,11 @@ describe('POST /api/predict', () => {
     )
   })
 
-  it('uses barcode in Tavily query when present', async () => {
+  it('uses barcode in Serper organic query when present', async () => {
     const { callModelWithThinking } = await import('@/lib/inference')
-    const { tavilySearch } = await import('@/lib/tavily')
+    const { serperOrganicSearch } = await import('@/lib/serper')
     vi.mocked(callModelWithThinking).mockResolvedValueOnce({ text: JSON.stringify(mockPrediction), thinking: null })
-    vi.mocked(tavilySearch).mockResolvedValueOnce([])
+    vi.mocked(serperOrganicSearch).mockResolvedValueOnce([])
 
     const visionWithBarcode = { ...mockVision, barcode: '4901780870448' }
     await POST(new Request('http://localhost/api/predict', {
@@ -96,7 +96,7 @@ describe('POST /api/predict', () => {
       body: JSON.stringify(visionWithBarcode),
     }))
 
-    expect(tavilySearch).toHaveBeenCalledWith('barcode 4901780870448 product', 3)
+    expect(serperOrganicSearch).toHaveBeenCalledWith('barcode 4901780870448 product')
   })
 
   it('returns 500 on invalid JSON from model', async () => {

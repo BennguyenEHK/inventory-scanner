@@ -1,6 +1,6 @@
 import { callModelWithThinking } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
-import { tavilySearch } from '@/lib/tavily'
+import { serperOrganicSearch } from '@/lib/serper'
 import type { VisionResult, PredictionResult } from '@/types'
 import { PREDICT_SYSTEM_PROMPT, buildPredictUserMessage } from '@/prompt/predict'
 
@@ -44,9 +44,9 @@ export async function POST(request: Request): Promise<Response> {
     const query = vision.barcode
       ? `barcode ${vision.barcode} product`
       : prediction.verification_query
-    const results = await tavilySearch(query, 3)
-    const confirmed = results.some(r =>
-      r.content.toLowerCase().includes(
+    const results = await serperOrganicSearch(query)
+    const confirmed = results.slice(0, 3).some(r =>
+      r.snippet.toLowerCase().includes(
         prediction.prediction.product_name.toLowerCase().split(' ')[0]
       )
     )

@@ -1,9 +1,8 @@
 import { callModel, extractJson } from '@/lib/inference'
 import { publishEvent } from '@/lib/pipeline-bus'
 import { redis } from '@/lib/redis'
-import { tavilySearch } from '@/lib/tavily'          // now backed by Serper organic
-import { firecrawlExtractAll } from '@/lib/firecrawl' // now backed by Jina 4-layer cascade
-import { serpApiShoppingSearch } from '@/lib/serpapi'  // now backed by Serper shopping
+import { serperOrganicSearch, serperShoppingSearch } from '@/lib/serper'
+import { jinaExtractAll } from '@/lib/jina'
 import { SEARCH_QUERY_SYSTEM_PROMPT, buildSearchQueryUserMessage, type ReSearchContext } from '@/prompt/search-query'
 import { SEARCH_SUFFICIENCY_SYSTEM_PROMPT, buildSufficiencyUserMessage } from '@/prompt/search-sufficiency'
 import type { PriceSource, SearchResult, VisionResult, SearchContext } from '@/types'
@@ -222,16 +221,16 @@ export async function POST(request: Request): Promise<Response> {
       // Shopping-first: attempt 0 skips organic entirely.
       // Organic (Serper → Jina cascade) is expensive — only run when shopping is insufficient.
       const useShoppingApi = attempt === 0 || nextEngine === 'serpapi_shopping' || nextEngine === 'both'
-      const useOrganic = attempt > 0 || nextEngine === 'tavily' || nextEngine === 'both'
+      const useOrganic = attempt > 0 || nextEngine === 'tavily' || nextEngine === 'serper_organic' || nextEngine === 'both'
 
       // Run engines in parallel, each isolated — one engine erroring (bad key, quota,
       // network) must NOT abort the whole search. Shopping returns prices directly (no cascade).
       const [organicResults, shoppingPrices] = await Promise.all([
         useOrganic
-          ? tavilySearch(query).catch(e => { console.error('[search] Serper organic failed:', e); return [] })
+          ? serperOrganicSearch(query).catch(e => { console.error('[search] Serper organic failed:', e); return [] })
           : Promise.resolve([]),
         useShoppingApi
-          ? serpApiShoppingSearch(query).catch(e => { console.error('[search] Serper shopping failed:', e); return [] })
+          ? serperShoppingSearch(query).catch(e => { console.error('[search] Serper shopping failed:', e); return [] })
           : Promise.resolve([]),
       ])
 
@@ -240,7 +239,7 @@ export async function POST(request: Request): Promise<Response> {
         .filter(r => {
           try { return !ctx.excludedDomains.includes(new URL(r.url).hostname) } catch { return false }
         })
-        .map(r => ({ url: r.url, snippet: r.content }))
+        .map(r => ({ url: r.url, snippet: r.snippet }))
 
       // Surface what EACH Serper engine actually returned this attempt. Attempt 0 is
       // shopping-only (shopping-first), so log shopping results and explicitly mark the
@@ -256,7 +255,7 @@ export async function POST(request: Request): Promise<Response> {
           await publishEvent(runId, { kind: 'search_skip', engine: 'Serper Organic', reason: 'shopping-first — runs only if shopping is insufficient' })
         }
       }
-      const { prices: scraped, discardReasons } = await firecrawlExtractAll(organicItems, visionCtx, runId ?? undefined)
+      const { prices: scraped, discardReasons } = await jinaExtractAll(organicItems, visionCtx, runId ?? undefined)
       // Surface verify-gate discard reasons into context so query planner avoids similar categories
       if (discardReasons.length > 0) ctx.contaminationReasons.push(...discardReasons)
 
