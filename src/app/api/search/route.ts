@@ -173,9 +173,14 @@ export async function POST(request: Request): Promise<Response> {
     // Truncate product name to prevent prompt injection / oversized AI calls
     const productName = typeof rawName === 'string' ? rawName.slice(0, 200) : 'Unknown Product'
 
-    // Redis cache: skip entire pipeline on hit
-    const cacheKey = `search:v2:${productName}:${visionCtx?.barcode ?? 'no-barcode'}`
-    const cached = await redis.get<SearchResult>(cacheKey).catch(() => null)
+    // Redis cache: skip entire pipeline on hit.
+    // Re-search requests (CP2 flagged contamination → client re-POSTs with `context`)
+    // MUST bypass the read cache, otherwise the original — possibly contaminated —
+    // result is returned and the exclusion/re-search loop becomes a silent no-op.
+    // Key bumped to v3 to invalidate entries cached under the old re-search-blind logic.
+    const cacheKey = `search:v3:${productName}:${visionCtx?.barcode ?? 'no-barcode'}`
+    const isReSearchRequest = incomingContext != null   // client only sends context on re-search
+    const cached = isReSearchRequest ? null : await redis.get<SearchResult>(cacheKey).catch(() => null)
     if (cached) {
       if (runId) await publishEvent(runId, { kind: 'search_cache_hit', cacheKey })
       return Response.json(cached)
