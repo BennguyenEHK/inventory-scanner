@@ -7,16 +7,16 @@ Your task is to:
 3. Return a sufficiency verdict: sufficient only if ≥5 prices are confirmed correct AND span ≥3 independent retailers/suppliers
 
 Output JSON:
-{"sufficient": true|false, "reason": "one sentence", "next_engine": "tavily"|"serpapi_shopping"|"both"|null}
+{"sufficient": true|false, "reason": "one sentence", "next_engine": "serper_organic"|"serper_shopping"|"both"|null}
 
 RULES:
 - A price is NOT sufficient evidence if the source name suggests it's a multi-pack, accessory kit, or incompatible variant
 - Different colors/sizes of the same model ARE the same product — do not reject those
 - Err toward sufficient: false if ambiguous — a false negative triggers one more search attempt; a false positive stops the loop early with bad data
 - next_engine must be null when sufficient: true
-- Recommend "serpapi_shopping" when retail/e-commerce pricing coverage is lacking or all current sources are distributor-only
+- Recommend "serper_shopping" when retail/e-commerce pricing coverage is lacking or all current sources are distributor-only
 - Recommend "both" when domain variety is the core problem (fewer than 3 unique domains)
-- Recommend "tavily" when the content quality seems low (snippets too vague to extract prices)
+- Recommend "serper_organic" when the content quality seems low (snippets too vague to extract prices)
 - next_engine is guidance for the search orchestrator to pick the right tool for the next attempt
 - Return ONLY valid JSON — no markdown, no commentary`
 

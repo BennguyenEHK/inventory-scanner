@@ -220,8 +220,8 @@ export async function POST(request: Request): Promise<Response> {
 
       // Shopping-first: attempt 0 skips organic entirely.
       // Organic (Serper → Jina cascade) is expensive — only run when shopping is insufficient.
-      const useShoppingApi = attempt === 0 || nextEngine === 'serpapi_shopping' || nextEngine === 'both'
-      const useOrganic = attempt > 0 || nextEngine === 'tavily' || nextEngine === 'serper_organic' || nextEngine === 'both'
+      const useShoppingApi = attempt === 0 || nextEngine === 'serper_shopping' || nextEngine === 'serpapi_shopping' || nextEngine === 'both'
+      const useOrganic = attempt > 0 || nextEngine === 'serper_organic' || nextEngine === 'tavily' || nextEngine === 'both'
 
       // Run engines in parallel, each isolated — one engine erroring (bad key, quota,
       // network) must NOT abort the whole search. Shopping returns prices directly (no cascade).
