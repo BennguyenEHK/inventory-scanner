@@ -5,6 +5,7 @@ import { fetchPageScreenshot, geminiExtractFromScreenshot } from './screenshot'
 import { applyVerifyGate, ManufacturerFlag } from './verify-gate'
 import { isProductPageUrl } from './url-filter'
 import type { PriceSource, VisionResult } from '@/types'
+import { publishEvent, type BusEvent } from './pipeline-bus'
 
 const BLOCKED_DOMAINS = [
   'youtube.com', 'youtu.be',
@@ -195,6 +196,17 @@ export function buildPriceSourceFromFields(
   }
 }
 
+// Diagnostic event logger — a Redis hiccup must NEVER break extraction, so swallow errors.
+async function logEvent(runId: string | undefined, event: BusEvent): Promise<void> {
+  if (!runId) return
+  try { await publishEvent(runId, event) } catch { /* best-effort logging */ }
+}
+
+// One-line summary of what an extraction layer produced (for extract_output events).
+function fieldsSummary(f: ExtractedFields): string {
+  return f.price != null ? `price ${f.price} ${f.currency ?? '?'}` : 'no price'
+}
+
 /**
  * 4-layer extraction cascade for one URL + Serper snippet.
  *
@@ -210,27 +222,41 @@ export async function extractFromUrl(
   snippet: string,
   vision?: VisionResult,
   discardReasons?: string[],
+  runId?: string,
 ): Promise<PriceSource | null> {
   if (!isScrapeable(url)) return null
 
   const sourceName = (() => { try { return new URL(url).hostname } catch { return url } })()
 
-  // L1: regex on snippet (always free)
+  // L1 — regex on the Serper snippet (always free, always runs)
+  await logEvent(runId, { kind: 'extract_layer', url, layer: 'L1', detail: 'regex on snippet' })
   let fields = extractFromText(snippet)
+  await logEvent(runId, { kind: 'extract_output', url, layer: 'L1', output: fieldsSummary(fields) })
 
   // L2 block: fetch full page only when L1 found no price
   let markdown: string | null = null
   if (fields.price === null) {
-    // L0: skip Jina fetch for non-product-page URLs (URL pattern, zero HTTP cost)
-    if (!isProductPageUrl(url)) return null
+    // L0 — URL pattern gate (free) before paying for a Jina fetch
+    await logEvent(runId, { kind: 'extract_layer', url, layer: 'L0', detail: 'URL product-page gate' })
+    if (!isProductPageUrl(url)) {
+      await logEvent(runId, { kind: 'extract_output', url, layer: 'L0', output: 'not a product page — skipped' })
+      return null
+    }
+    await logEvent(runId, { kind: 'extract_output', url, layer: 'L0', output: 'product page — proceeding' })
 
+    // L2 — Jina full-page fetch + regex + JSON-LD
+    await logEvent(runId, { kind: 'search_urls', engine: 'Jina', urls: [url] }) // req2: the Jina-fetched URL
+    await logEvent(runId, { kind: 'extract_layer', url, layer: 'L2', detail: 'Jina fetch + JSON-LD' })
     const l2 = await jinaExtract(url, snippet)
     markdown = l2.markdown
 
-    // Skip if full page contains no price signal — L3/L4 unlikely to help
-    if (markdown && !PRICE_RE_QUICK.test(markdown)) return null
+    if (markdown && !PRICE_RE_QUICK.test(markdown)) {
+      await logEvent(runId, { kind: 'extract_output', url, layer: 'L2', output: 'page has no price signal — skipped' })
+      return null
+    }
 
     fields = mergeFields(fields, l2.fields)
+    await logEvent(runId, { kind: 'extract_output', url, layer: 'L2', output: markdown ? fieldsSummary(fields) : 'Jina fetch failed' })
   }
 
   // L2.5: variant picker — fires when multiple distinct prices exist AND vision available
@@ -238,8 +264,14 @@ export async function extractFromUrl(
   if (vision && fields.all_prices && fields.all_prices.length > 1 && fields.price) {
     const distinct = deduplicatePrices(fields.all_prices)
     if (distinct.length > 1) {
+      await logEvent(runId, { kind: 'extract_layer', url, layer: 'L2.5', detail: `${distinct.length} variant prices` })
       const picked = await pickVariantPrice(distinct, vision)
-      if (picked) fields = { ...fields, price: picked.price, currency: picked.currency }
+      if (picked) {
+        fields = { ...fields, price: picked.price, currency: picked.currency }
+        await logEvent(runId, { kind: 'extract_output', url, layer: 'L2.5', output: `picked ${picked.price} ${picked.currency}` })
+      } else {
+        await logEvent(runId, { kind: 'extract_output', url, layer: 'L2.5', output: 'kept original price' })
+      }
     }
   }
 
@@ -247,19 +279,23 @@ export async function extractFromUrl(
   if (markdown) {
     const still = missingFieldNames(fields)
     if (still.length > 0) {
+      await logEvent(runId, { kind: 'extract_layer', url, layer: 'L3', detail: `gap-fill ${still.join(', ')}` })
       const patch = await qwenGapFill(still, url, markdown)
       fields = applyPartial(fields, patch)
+      await logEvent(runId, { kind: 'extract_output', url, layer: 'L3', output: fieldsSummary(fields) })
     }
   }
 
   // L4: ScreenshotOne + Gemini Flash (only when price still null)
   if (fields.price === null && process.env.SCREENSHOTONE_ACCESS_KEY) {
+    await logEvent(runId, { kind: 'extract_layer', url, layer: 'L4', detail: 'screenshot + Gemini' })
     const screenshot = await fetchPageScreenshot(url)
     if (screenshot) {
       const l4Missing = missingFieldNames(fields)
       const patch = await geminiExtractFromScreenshot(screenshot, l4Missing)
       fields = applyPartial(fields, patch)
     }
+    await logEvent(runId, { kind: 'extract_output', url, layer: 'L4', output: fieldsSummary(fields) })
   }
 
   if (!fields.price || !fields.currency) return null
@@ -287,6 +323,7 @@ export async function extractFromUrl(
 export async function firecrawlExtractAll(
   results: Array<{ url: string; snippet: string }>,
   vision?: VisionResult,
+  runId?: string,
 ): Promise<ExtractionResult> {
   const scrapeable = results.filter(r => isScrapeable(r.url))
   const prices: PriceSource[] = []
@@ -296,7 +333,7 @@ export async function firecrawlExtractAll(
   for (let i = 0; i < scrapeable.length; i += BATCH) {
     const batch = scrapeable.slice(i, i + BATCH)
     const settled = await Promise.allSettled(
-      batch.map(r => extractFromUrl(r.url, r.snippet, vision, discardReasons))
+      batch.map(r => extractFromUrl(r.url, r.snippet, vision, discardReasons, runId))
     )
     for (const s of settled) {
       if (s.status === 'fulfilled' && s.value) prices.push(s.value)

@@ -130,3 +130,53 @@ export async function jinaExtract(
 }
 
 export { JINA_MAX_CHARS }
+
+// --- Image extraction (restores the product-image pipeline) ---
+
+// Jina embeds page images as markdown ![alt](url) — capture the URL.
+const MARKDOWN_IMAGE_RE = /!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/g
+
+/** Pull every image URL written as markdown image syntax from Jina markdown. */
+export function extractImageUrlsFromMarkdown(markdown: string): string[] {
+  const urls: string[] = []
+  MARKDOWN_IMAGE_RE.lastIndex = 0 // /g regex — reset before reuse
+  let m: RegExpExecArray | null
+  while ((m = MARKDOWN_IMAGE_RE.exec(markdown)) !== null) urls.push(m[1])
+  return urls
+}
+
+// JSON-LD Product.image can be: string | string[] | {url} | {url}[] — collect recursively.
+function collectJsonLdImage(value: unknown, out: string[]): void {
+  if (!value) return
+  if (typeof value === 'string') { if (value.startsWith('http')) out.push(value); return }
+  if (Array.isArray(value)) { for (const v of value) collectJsonLdImage(v, out); return }
+  if (typeof value === 'object') {
+    const url = (value as Record<string, unknown>)['url']
+    if (typeof url === 'string' && url.startsWith('http')) out.push(url)
+  }
+}
+
+/** Pull product image URLs from Product-typed JSON-LD blocks (the real product photos). */
+export function extractImagesFromJsonLd(blocks: Record<string, unknown>[]): string[] {
+  const urls: string[] = []
+  for (const block of blocks) {
+    const type = String(block['@type'] ?? '').toLowerCase()
+    if (!type.includes('product')) continue
+    collectJsonLdImage(block['image'], urls)
+  }
+  return urls
+}
+
+/**
+ * Fetch a price-source page via Jina and harvest its product image URLs.
+ * Reuses the same Jina markdown we already pay for during search extraction.
+ * JSON-LD images (highest quality) are returned first, then inline markdown
+ * images. Deduped; NOT filtered here (caller applies isProductImage()).
+ */
+export async function jinaExtractImages(url: string): Promise<string[]> {
+  const markdown = await jinaFetch(url)
+  if (!markdown) return []
+  const fromJsonLd = extractImagesFromJsonLd(extractJsonLdFromMarkdown(markdown))
+  const fromMarkdown = extractImageUrlsFromMarkdown(markdown)
+  return [...new Set([...fromJsonLd, ...fromMarkdown])] // JSON-LD first = higher quality
+}

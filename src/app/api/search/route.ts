@@ -237,8 +237,9 @@ export async function POST(request: Request): Promise<Response> {
         })
         .map(r => ({ url: r.url, snippet: r.content }))
 
+      if (runId) await publishEvent(runId, { kind: 'search_urls', engine: 'Serper', urls: organicItems.map(i => i.url) })
       if (runId) await publishEvent(runId, { kind: 'search_organic', urlCount: organicItems.length })
-      const { prices: scraped, discardReasons } = await firecrawlExtractAll(organicItems, visionCtx)
+      const { prices: scraped, discardReasons } = await firecrawlExtractAll(organicItems, visionCtx, runId ?? undefined)
       // Surface verify-gate discard reasons into context so query planner avoids similar categories
       if (discardReasons.length > 0) ctx.contaminationReasons.push(...discardReasons)
 

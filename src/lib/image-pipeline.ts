@@ -1,53 +1,36 @@
-import { firecrawlExtractImages, isProductImage } from '@/lib/firecrawl'
+import { isProductImage } from '@/lib/firecrawl'
+import { jinaExtractImages } from '@/lib/jina'
 import { validateProductImages, MAX_CANDIDATES } from '@/lib/gemini-images'
-import { tavilyImageSearch } from '@/lib/tavily'
 import type { PriceSource, VisionResult } from '@/types'
 
 const NEEDED = 3
 
+/**
+ * Build the report's product-image set by harvesting JSON-LD / inline images from
+ * the price-source pages already discovered in Stage 3 (via Jina), then letting
+ * Gemini vision pick the ones that actually match the scanned product.
+ *
+ * Replaces the dead Firecrawl image-scrape + Tavily image-search path: Serper has
+ * no image endpoint and Firecrawl was removed, so both legacy sources returned [].
+ */
 export async function selectProductImages(
-  productName: string,
+  _productName: string,            // kept for caller compatibility; no longer used
   sources: PriceSource[],
-  vision: VisionResult
+  vision: VisionResult,
 ): Promise<string[]> {
-  // Step 1 — extract images from already-verified price-source pages (free reuse of Stage 3)
+  // Step 1 — harvest candidate images from each verified price-source page via Jina
   const rawImages = (
-    await Promise.all(sources.map(s => firecrawlExtractImages(s.url)))
+    await Promise.all(sources.map(s => jinaExtractImages(s.url)))
   ).flat()
 
-  // Step 2 — deterministic pre-filter + dedup
+  // Step 2 — deterministic pre-filter (drop logos/icons/sprites) + dedup
   const candidates = [...new Set(rawImages)].filter(isProductImage)
+  if (candidates.length === 0) return []
 
-  // Step 3 — Gemini vision gate
-  if (candidates.length > 0) {
-    const validated = await validateProductImages(
-      candidates.slice(0, MAX_CANDIDATES),
-      vision,
-      NEEDED
-    )
-    if (validated.length >= NEEDED) return validated
-  }
+  // Step 3 — Gemini vision gate picks the images matching the scanned product
+  const validated = await validateProductImages(candidates.slice(0, MAX_CANDIDATES), vision, NEEDED)
 
-  // Step 4 — targeted Tavily fallback (brand + model_number are more specific than productName alone)
-  const fallbackQuery = [vision.brand, vision.model_number, productName, 'product image']
-    .filter(Boolean)
-    .join(' ')
-  const fallbackResults = await tavilyImageSearch(fallbackQuery, 9)
-  const fallbackCandidates = fallbackResults
-    .map(r => r.url)
-    .filter(isProductImage)
-    .filter(u => !candidates.includes(u))
-
-  const allCandidates = [...candidates, ...fallbackCandidates]
-  if (allCandidates.length === 0) return []
-
-  const validated = await validateProductImages(
-    allCandidates.slice(0, MAX_CANDIDATES),
-    vision,
-    NEEDED
-  )
-
-  // If Gemini validation rejected everything, fall back to returning raw candidates
-  // (better to show some images than none)
-  return validated.length > 0 ? validated : allCandidates.slice(0, NEEDED)
+  // If the gate rejected everything, show the top raw candidates anyway
+  // (better to show some images than none).
+  return validated.length > 0 ? validated : candidates.slice(0, NEEDED)
 }

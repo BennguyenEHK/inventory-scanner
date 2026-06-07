@@ -15,6 +15,9 @@ export type BusEvent =
   | { kind: 'search_firecrawl';  urlCount: number }
   | { kind: 'search_prices';     newCount: number; totalCount: number }
   | { kind: 'search_sufficient'; sufficient: boolean; reason?: string }
+  | { kind: 'search_urls';    engine: string; urls: string[] }
+  | { kind: 'extract_layer';  url: string; layer: string; detail?: string }
+  | { kind: 'extract_output'; url: string; layer: string; output: string }
   | { kind: 'done' }
 
 export async function publishEvent(runId: string, event: BusEvent): Promise<void> {
@@ -35,6 +38,9 @@ export async function pollEvents(
     .filter(Boolean) as BusEvent[]
   return { events, newCursor: cursor + events.length }
 }
+
+// Hostname for compact log lines; falls back to the raw string on parse failure.
+function hostOf(url: string): string { try { return new URL(url).hostname } catch { return url } }
 
 // Human-readable line + which stage it belongs to
 export function busEventToLine(event: BusEvent): { stageId: number; line: string } | null {
@@ -67,6 +73,19 @@ export function busEventToLine(event: BusEvent): { stageId: number; line: string
           ? '✓ Sufficient sources — stopping loop'
           : `↩ Not sufficient${event.reason ? ': ' + event.reason : ''} — retrying…`,
       }
+    case 'search_urls': {
+      const trunc = (u: string) => (u.length > 80 ? u.slice(0, 80) + '…' : u)
+      const shown = event.urls.slice(0, 5).map(trunc).join('\n   • ')
+      const more = event.urls.length > 5 ? `\n   (+${event.urls.length - 5} more)` : ''
+      return {
+        stageId: 3,
+        line: `🔗 ${event.engine} → ${event.urls.length} URL${event.urls.length !== 1 ? 's' : ''}:\n   • ${shown}${more}`,
+      }
+    }
+    case 'extract_layer':
+      return { stageId: 3, line: `⚙️ [${event.layer}] activated → ${hostOf(event.url)}${event.detail ? ` (${event.detail})` : ''}` }
+    case 'extract_output':
+      return { stageId: 3, line: `📤 [${event.layer}] ${hostOf(event.url)} → ${event.output}` }
     default:
       return null
   }
