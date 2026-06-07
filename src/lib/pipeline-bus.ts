@@ -16,6 +16,7 @@ export type BusEvent =
   | { kind: 'search_prices';     newCount: number; totalCount: number }
   | { kind: 'search_sufficient'; sufficient: boolean; reason?: string }
   | { kind: 'search_urls';    engine: string; urls: string[] }
+  | { kind: 'search_skip';    engine: string; reason: string }
   | { kind: 'extract_layer';  url: string; layer: string; detail?: string }
   | { kind: 'extract_output'; url: string; layer: string; output: string }
   | { kind: 'done' }
@@ -82,6 +83,8 @@ export function busEventToLine(event: BusEvent): { stageId: number; line: string
         line: `🔗 ${event.engine} → ${event.urls.length} URL${event.urls.length !== 1 ? 's' : ''}:\n   • ${shown}${more}`,
       }
     }
+    case 'search_skip':
+      return { stageId: 3, line: `⏭️ ${event.engine} skipped — ${event.reason}` }
     case 'extract_layer':
       return { stageId: 3, line: `⚙️ [${event.layer}] activated → ${hostOf(event.url)}${event.detail ? ` (${event.detail})` : ''}` }
     case 'extract_output':

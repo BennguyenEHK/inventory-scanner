@@ -237,8 +237,20 @@ export async function POST(request: Request): Promise<Response> {
         })
         .map(r => ({ url: r.url, snippet: r.content }))
 
-      if (runId) await publishEvent(runId, { kind: 'search_urls', engine: 'Serper', urls: organicItems.map(i => i.url) })
-      if (runId) await publishEvent(runId, { kind: 'search_organic', urlCount: organicItems.length })
+      // Surface what EACH Serper engine actually returned this attempt. Attempt 0 is
+      // shopping-only (shopping-first), so log shopping results and explicitly mark the
+      // organic path as skipped — otherwise the skipped engine misleadingly logged
+      // "Serper → 0 URLs" even though it was never called.
+      if (runId) {
+        if (useShoppingApi)
+          await publishEvent(runId, { kind: 'search_urls', engine: 'Serper Shopping', urls: shoppingPrices.map(p => p.url) })
+        if (useOrganic) {
+          await publishEvent(runId, { kind: 'search_urls', engine: 'Serper Organic', urls: organicItems.map(i => i.url) })
+          await publishEvent(runId, { kind: 'search_organic', urlCount: organicItems.length })
+        } else {
+          await publishEvent(runId, { kind: 'search_skip', engine: 'Serper Organic', reason: 'shopping-first — runs only if shopping is insufficient' })
+        }
+      }
       const { prices: scraped, discardReasons } = await firecrawlExtractAll(organicItems, visionCtx, runId ?? undefined)
       // Surface verify-gate discard reasons into context so query planner avoids similar categories
       if (discardReasons.length > 0) ctx.contaminationReasons.push(...discardReasons)
