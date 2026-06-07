@@ -2,10 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { selectProductImages } from './image-pipeline'
 import type { PriceSource, VisionResult } from '@/types'
 
-vi.mock('@/lib/firecrawl', () => ({
-  isProductImage: vi.fn(),
-}))
 vi.mock('@/lib/jina', () => ({
+  isProductImage: vi.fn(),
   jinaExtractImages: vi.fn(),
 }))
 vi.mock('@/lib/gemini-images', async (importOriginal) => {
@@ -13,8 +11,7 @@ vi.mock('@/lib/gemini-images', async (importOriginal) => {
   return { ...actual, validateProductImages: vi.fn() }
 })
 
-import { isProductImage } from '@/lib/firecrawl'
-import { jinaExtractImages } from '@/lib/jina'
+import { isProductImage, jinaExtractImages } from '@/lib/jina'
 import { validateProductImages } from '@/lib/gemini-images'
 
 const SOURCES: PriceSource[] = [

@@ -1,4 +1,4 @@
-import { isProductImage } from '@/lib/firecrawl'
+import { isProductImage } from '@/lib/jina'
 import { jinaExtractImages } from '@/lib/jina'
 import { validateProductImages, MAX_CANDIDATES } from '@/lib/gemini-images'
 import type { PriceSource, VisionResult } from '@/types'
