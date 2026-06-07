@@ -8,6 +8,8 @@ export interface ExtractedFields {
   length: string | null
   width: string | null
   items_origin: string | null
+  // All price candidates found on page — used by L2.5 variant picker
+  all_prices?: Array<{ price: number; currency: string; context: string }> | null
 }
 
 const SYMBOL_MAP: Array<[string, string]> = [
@@ -58,10 +60,11 @@ export function extractFromText(text: string): ExtractedFields {
     manufacturer: null, itemDescription: null, length: null, width: null, items_origin: null,
   }
 
-  // --- Price: labeled patterns take priority ---
-  const labeledCandidates: Array<{ price: number; currency: string }> = []
-  LABELED_PRICE_RE.lastIndex = 0
+  // --- Price: collect ALL candidates; labeled patterns take priority for result.price ---
+  const allPricesRaw: Array<{ price: number; currency: string; context: string }> = []
   let m: RegExpExecArray | null
+
+  LABELED_PRICE_RE.lastIndex = 0
   while ((m = LABELED_PRICE_RE.exec(text)) !== null) {
     const price = parseNumeric(m[1])
     if (!isFinite(price) || price <= 0) continue
@@ -69,19 +72,25 @@ export function extractFromText(text: string): ExtractedFields {
     const sym = SYMBOL_MAP.find(([s]) => nearby.toUpperCase().includes(s.toUpperCase()))
     const code = nearby.match(CODE_RE)
     const currency = code ? code[0].toUpperCase() : (sym ? sym[1] : 'USD')
-    labeledCandidates.push({ price, currency })
+    const ctx = text.slice(Math.max(0, m.index - 60), m.index + m[0].length + 60).replace(/\s+/g, ' ').trim()
+    allPricesRaw.push({ price, currency, context: ctx })
   }
 
-  if (labeledCandidates.length > 0) {
-    result.price = labeledCandidates[0].price
-    result.currency = labeledCandidates[0].currency
+  if (allPricesRaw.length > 0) {
+    result.price = allPricesRaw[0].price
+    result.currency = allPricesRaw[0].currency
   } else {
     PRICE_RE.lastIndex = 0
     while ((m = PRICE_RE.exec(text)) !== null) {
       const parsed = parsePriceRaw(m[0])
-      if (parsed) { result.price = parsed.price; result.currency = parsed.currency; break }
+      if (!parsed) continue
+      const ctx = text.slice(Math.max(0, m.index - 60), m.index + m[0].length + 60).replace(/\s+/g, ' ').trim()
+      allPricesRaw.push({ price: parsed.price, currency: parsed.currency, context: ctx })
+      if (!result.price) { result.price = parsed.price; result.currency = parsed.currency }
     }
   }
+
+  result.all_prices = allPricesRaw.length > 0 ? allPricesRaw : null
 
   // --- Stock ---
   if (OUT_OF_STOCK_RE.test(text)) result.in_stock = false
@@ -123,10 +132,16 @@ export function mergeFields(base: ExtractedFields, overlay: ExtractedFields): Ex
     length:          overlay.length          ?? base.length,
     width:           overlay.width           ?? base.width,
     items_origin:    overlay.items_origin    ?? base.items_origin,
+    all_prices:      overlay.all_prices      ?? base.all_prices,
   }
 }
 
-/** List field names that are still null in the given result. */
+// Fields eligible for L3 gap-fill — excludes all_prices (informational only)
+const FILLABLE_FIELDS: ReadonlyArray<keyof ExtractedFields> = [
+  'price', 'currency', 'unit', 'in_stock', 'manufacturer', 'itemDescription', 'length', 'width', 'items_origin',
+]
+
+/** List field names that are still null and eligible for L3 gap-fill. */
 export function missingFieldNames(fields: ExtractedFields): Array<keyof ExtractedFields> {
-  return (Object.keys(fields) as Array<keyof ExtractedFields>).filter(k => fields[k] === null)
+  return FILLABLE_FIELDS.filter(k => fields[k] === null)
 }

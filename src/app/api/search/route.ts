@@ -206,6 +206,8 @@ export async function POST(request: Request): Promise<Response> {
       MAX_ATTEMPTS
     )
 
+    if (runId) await publishEvent(runId, { kind: 'search_queries_planned', queries, count: queries.length })
+
     while (attempt < MAX_ATTEMPTS) {
       const query = queries[attempt] ?? queries[queries.length - 1]
       ctx.triedQueries.push(query)
@@ -236,7 +238,9 @@ export async function POST(request: Request): Promise<Response> {
         .map(r => ({ url: r.url, snippet: r.content }))
 
       if (runId) await publishEvent(runId, { kind: 'search_organic', urlCount: organicItems.length })
-      const scraped = await firecrawlExtractAll(organicItems, visionCtx)
+      const { prices: scraped, discardReasons } = await firecrawlExtractAll(organicItems, visionCtx)
+      // Surface verify-gate discard reasons into context so query planner avoids similar categories
+      if (discardReasons.length > 0) ctx.contaminationReasons.push(...discardReasons)
 
       // Merge: scraped organic + direct shopping prices
       prices = deduplicate([...prices, ...scraped, ...shoppingPrices])

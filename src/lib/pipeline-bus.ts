@@ -8,8 +8,9 @@ const TTL = 3600 // 1 hour
 export type BusEvent =
   | { kind: 'thinking';          stageId: number; cp?: 1 | 2; text: string }
   | { kind: 'search_query';      attempt: number; query: string }
-  | { kind: 'search_cache_hit';  cacheKey: string }
-  | { kind: 'search_tavily';     count: number; urls: string[] }
+  | { kind: 'search_cache_hit';      cacheKey: string }
+  | { kind: 'search_queries_planned'; queries: string[]; count: number }
+  | { kind: 'search_tavily';          count: number; urls: string[] }
   | { kind: 'search_organic';    urlCount: number }
   | { kind: 'search_firecrawl';  urlCount: number }
   | { kind: 'search_prices';     newCount: number; totalCount: number }
@@ -49,6 +50,8 @@ export function busEventToLine(event: BusEvent): { stageId: number; line: string
       return { stageId: 3, line: `🔍 Attempt ${event.attempt}: "${event.query}"` }
     case 'search_cache_hit':
       return { stageId: 3, line: `⚡ Cache hit — skipping search pipeline` }
+    case 'search_queries_planned':
+      return { stageId: 3, line: `📋 ${event.count} quer${event.count !== 1 ? 'ies' : 'y'} planned: ${event.queries.map((q, i) => `${i + 1}. "${q}"`).join(' │ ')}` }
     case 'search_tavily':
       return { stageId: 3, line: `📡 Serper organic → ${event.count} URL${event.count !== 1 ? 's' : ''} found` }
     case 'search_organic':
