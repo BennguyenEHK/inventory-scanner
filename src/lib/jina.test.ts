@@ -2,6 +2,8 @@ import { describe, it, test, expect } from 'vitest'
 import {
   extractJsonLdFromMarkdown,
   extractFromJsonLd,
+  extractImageUrlsFromMarkdown,
+  extractImagesFromJsonLd,
   isScrapeable,
   isProductImage,
   buildPriceSourceFromFields,
@@ -40,6 +42,41 @@ test('extractFromJsonLd pulls price from Product offer', () => {
 test('extractFromJsonLd returns no fields when no product data', () => {
   const fields = extractFromJsonLd([{ '@type': 'WebSite', name: 'Bunnings' }])
   expect(fields.price).toBeUndefined()
+})
+
+// ─── Image extraction ─────────────────────────────────────────────────────
+
+test('extractImageUrlsFromMarkdown finds markdown image links', () => {
+  const md = 'Some text\n![Product photo](https://cdn.store.com/img/product-123.jpg)\n![icon](https://store.com/icon.png)'
+  const urls = extractImageUrlsFromMarkdown(md)
+  expect(urls).toEqual([
+    'https://cdn.store.com/img/product-123.jpg',
+    'https://store.com/icon.png',
+  ])
+})
+
+test('extractImageUrlsFromMarkdown returns empty for no images', () => {
+  expect(extractImageUrlsFromMarkdown('No images here')).toEqual([])
+})
+
+test('extractImagesFromJsonLd pulls image from Product block', () => {
+  const blocks = [{ '@type': 'Product', image: 'https://cdn.example.com/product.jpg' }]
+  const urls = extractImagesFromJsonLd(blocks as Record<string, unknown>[])
+  expect(urls).toContain('https://cdn.example.com/product.jpg')
+})
+
+test('extractImagesFromJsonLd handles array of image URLs', () => {
+  const blocks = [{
+    '@type': 'Product',
+    image: ['https://cdn.example.com/a.jpg', 'https://cdn.example.com/b.jpg'],
+  }]
+  const urls = extractImagesFromJsonLd(blocks as Record<string, unknown>[])
+  expect(urls).toHaveLength(2)
+})
+
+test('extractImagesFromJsonLd ignores non-Product blocks', () => {
+  const blocks = [{ '@type': 'WebPage', image: 'https://cdn.example.com/page.jpg' }]
+  expect(extractImagesFromJsonLd(blocks as Record<string, unknown>[])).toHaveLength(0)
 })
 
 // ─── URL classification ───────────────────────────────────────────────────

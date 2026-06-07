@@ -127,9 +127,9 @@ export function extractFromJsonLd(blocks: Record<string, unknown>[]): Partial<Ex
 export async function jinaExtract(
   url: string,
   snippet: string,
-): Promise<{ fields: ExtractedFields; markdown: string | null }> {
+): Promise<{ fields: ExtractedFields; content: string | null }> {
   const content = await jinaFetch(url)
-  if (!content) return { fields: extractFromText(snippet), markdown: null }
+  if (!content) return { fields: extractFromText(snippet), content: null }
 
   const regexFields = extractFromText(content)
 
@@ -147,8 +147,11 @@ export async function jinaExtract(
     items_origin:    jsonLdFields.items_origin    ?? null,
   }
 
-  return { fields: mergeFields(regexFields, mergedJsonLd), markdown: content }
+  return { fields: mergeFields(regexFields, mergedJsonLd), content }
 }
+
+const PRICE_RE_QUICK =
+  /(?:AU\$|CA\$|\$|€|£|USD|AUD|EUR|GBP)\s*[\d,.]{1,10}|[\d,.]{1,10}\s*(?:USD|AUD|EUR|GBP)/i
 
 // ─── Image extraction (uses markdown fetch to preserve image links) ────────
 
@@ -297,9 +300,6 @@ async function pickVariantPrice(
 
 // ─── L3 Qwen gap-fill ─────────────────────────────────────────────────────
 
-const PRICE_RE_QUICK =
-  /(?:AU\$|CA\$|\$|€|£|USD|AUD|EUR|GBP)\s*[\d,.]{1,10}|[\d,.]{1,10}\s*(?:USD|AUD|EUR|GBP)/i
-
 const L3_SYSTEM_PROMPT =
   `You are a product data extractor. Given product page content, extract ONLY the listed fields. Output a single valid JSON object. Use null for fields not present. No explanation — JSON only.`
 
@@ -428,7 +428,7 @@ async function extractFromUrl(
     await logEvent(runId, { kind: 'search_urls', engine: 'Jina', urls: [url] })
     await logEvent(runId, { kind: 'extract_layer', url, layer: 'L2', detail: 'Jina text fetch + JSON-LD' })
     const l2 = await jinaExtract(url, snippet)
-    content = l2.markdown
+    content = l2.content
 
     if (content && !PRICE_RE_QUICK.test(content)) {
       await logEvent(runId, { kind: 'extract_output', url, layer: 'L2', output: 'page has no price signal — skipped' })
