@@ -24,7 +24,9 @@ const LABELED_PRICE_RE = /(?:unit\s+price|selling\s+price|our\s+price|list\s+pri
 const IN_STOCK_RE = /\b(in\s+stock|available(?!\s+soon)|ships?\s+(?:now|today)|ready\s+to\s+ship)\b/i
 const OUT_OF_STOCK_RE = /\b(out\s+of\s+stock|unavailable|discontinued|sold\s+out)\b/i
 const UNIT_RE = /\b(pack\s+of\s+\d+|box\s+of\s+\d+|set\s+of\s+\d+|roll|each|per\s+unit|single)\b/i
-const MANUFACTURER_RE = /\b(?:by|brand|manufacturer|made\s+by|manufactured\s+by)\s*:?\s*([A-Z][a-zA-Z0-9&\s\-]{1,35}?)(?=\s*[-,.|(\n]|$)/m
+// Keyword is case-insensitive ([Bb]rand…); capture stays strictly [A-Z]-initial
+// so we don't grab lowercase filler words after the keyword (e.g. "by the company").
+const MANUFACTURER_RE = /\b(?:[Bb]y|[Bb]rand|[Mm]anufacturer|[Mm]ade\s+[Bb]y|[Mm]anufactured\s+[Bb]y)\s*:?\s*([A-Z][a-zA-Z0-9&\s\-]{1,35}?)(?=\s*[-,.|(\n]|$)/m
 const DIMENSION_RE = /(\d+(?:\.\d+)?)\s*(mm|cm|m|in|")\s*[x×]\s*(\d+(?:\.\d+)?)\s*(mm|cm|m|in|")?/i
 const ORIGIN_RE = /(?:made\s+in|country\s+of\s+origin\s*:?\s*|manufactured\s+in)\s*([A-Z][a-zA-Z\s]{2,24}?)(?=\s*[-.,\n]|$)/mi
 

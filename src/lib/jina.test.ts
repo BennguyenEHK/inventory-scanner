@@ -28,7 +28,8 @@ test('extractFromJsonLd pulls price from Product offer', () => {
   expect(fields.itemDescription).toMatch(/drill/i)
 })
 
-test('extractFromJsonLd returns nulls when no product data', () => {
+test('extractFromJsonLd returns no fields when no product data', () => {
+  // Returns a Partial — absent fields are undefined, not null
   const fields = extractFromJsonLd([{ '@type': 'WebSite', name: 'Bunnings' }])
-  expect(fields.price).toBeNull()
+  expect(fields.price).toBeUndefined()
 })

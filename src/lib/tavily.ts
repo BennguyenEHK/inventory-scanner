@@ -13,13 +13,16 @@ export interface TavilyImageResult {
   description?: string
 }
 
-export async function tavilySearch(query: string): Promise<TavilyResult[]> {
+export async function tavilySearch(query: string, maxResults = 8): Promise<TavilyResult[]> {
   const results = await serperOrganicSearch(query)
-  // score=1 placeholder — route.ts uses url/content, not score
-  return results.map(r => ({ url: r.url, title: r.title, content: r.snippet, score: 1 }))
+  // score=1 placeholder — callers use url/content, not score
+  return results
+    .slice(0, maxResults)
+    .map(r => ({ url: r.url, title: r.title, content: r.snippet, score: 1 }))
 }
 
-// Serper.dev has no dedicated image search — return empty to avoid breaking callers.
-export async function tavilyImageSearch(): Promise<TavilyImageResult[]> {
+// Serper.dev has no dedicated image search — returns empty (graceful no-op).
+// Params kept for caller compatibility (image-pipeline fallback path); unused.
+export async function tavilyImageSearch(_query?: string, _maxResults?: number): Promise<TavilyImageResult[]> {
   return []
 }

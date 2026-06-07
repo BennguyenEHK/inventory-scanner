@@ -44,8 +44,9 @@ export function isProductImage(url: string): boolean {
   }
 }
 
-// Firecrawl removed — image pipeline uses vision stage instead
-export async function firecrawlExtractImages(): Promise<string[]> {
+// Firecrawl removed — image pipeline uses vision stage instead.
+// Param kept for caller compatibility (image-pipeline Step 1); unused.
+export async function firecrawlExtractImages(_url?: string): Promise<string[]> {
   return []
 }
 

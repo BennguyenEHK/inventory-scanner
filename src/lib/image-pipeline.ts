@@ -12,7 +12,7 @@ export async function selectProductImages(
 ): Promise<string[]> {
   // Step 1 — extract images from already-verified price-source pages (free reuse of Stage 3)
   const rawImages = (
-    await Promise.all(sources.map(() => firecrawlExtractImages()))
+    await Promise.all(sources.map(s => firecrawlExtractImages(s.url)))
   ).flat()
 
   // Step 2 — deterministic pre-filter + dedup
@@ -32,7 +32,7 @@ export async function selectProductImages(
   const fallbackQuery = [vision.brand, vision.model_number, productName, 'product image']
     .filter(Boolean)
     .join(' ')
-  const fallbackResults = await tavilyImageSearch()
+  const fallbackResults = await tavilyImageSearch(fallbackQuery, 9)
   const fallbackCandidates = fallbackResults
     .map(r => r.url)
     .filter(isProductImage)
