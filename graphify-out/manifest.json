@@ -1,0 +1,477 @@
+{
+  "D:\\dev\\inventory-scanner\\eslint.config.mjs": {
+    "mtime": 1780587762.6307683,
+    "ast_hash": "dfa1f5f6a7037bf39dc510f30b180002",
+    "semantic_hash": "dfa1f5f6a7037bf39dc510f30b180002"
+  },
+  "D:\\dev\\inventory-scanner\\next.config.ts": {
+    "mtime": 1780636914.5322742,
+    "ast_hash": "6fa187ce44bafd86114b9c8f87d2d971",
+    "semantic_hash": "6fa187ce44bafd86114b9c8f87d2d971"
+  },
+  "D:\\dev\\inventory-scanner\\package.json": {
+    "mtime": 1780675672.4923277,
+    "ast_hash": "48879109821be2f90de6a6fe8860e1ef",
+    "semantic_hash": "48879109821be2f90de6a6fe8860e1ef"
+  },
+  "D:\\dev\\inventory-scanner\\postcss.config.mjs": {
+    "mtime": 1780587762.680534,
+    "ast_hash": "239f3ebf717465dc636818a1a619398d",
+    "semantic_hash": "239f3ebf717465dc636818a1a619398d"
+  },
+  "D:\\dev\\inventory-scanner\\scripts\\test-hf.mjs": {
+    "mtime": 1780741213.9376485,
+    "ast_hash": "a153cb8f406e7737027d0a2a91089689",
+    "semantic_hash": "a153cb8f406e7737027d0a2a91089689"
+  },
+  "D:\\dev\\inventory-scanner\\src\\actions\\command.ts": {
+    "mtime": 1780721494.871979,
+    "ast_hash": "0c78de9b1704ffc604dea6817e9e863b",
+    "semantic_hash": "0c78de9b1704ffc604dea6817e9e863b"
+  },
+  "D:\\dev\\inventory-scanner\\src\\actions\\notion.ts": {
+    "mtime": 1780721862.7265148,
+    "ast_hash": "7ca6d2a90e7ca29ca92c0083d0445fb9",
+    "semantic_hash": "7ca6d2a90e7ca29ca92c0083d0445fb9"
+  },
+  "D:\\dev\\inventory-scanner\\src\\actions\\report.ts": {
+    "mtime": 1780803458.2591074,
+    "ast_hash": "58150d9cbe9b4422963c4cedb9cff4ba",
+    "semantic_hash": "58150d9cbe9b4422963c4cedb9cff4ba"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\command\\parse.test.ts": {
+    "mtime": 1780636652.85749,
+    "ast_hash": "ad8ad6603dea34c977761120042f5673",
+    "semantic_hash": "ad8ad6603dea34c977761120042f5673"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\command\\parse.ts": {
+    "mtime": 1780636643.3785965,
+    "ast_hash": "24b1995b5a516774fe6a1de4119253ef",
+    "semantic_hash": "24b1995b5a516774fe6a1de4119253ef"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\command\\route.ts": {
+    "mtime": 1780636645.0812309,
+    "ast_hash": "f722ecdb37fff551f332d30ae81c4c11",
+    "semantic_hash": "f722ecdb37fff551f332d30ae81c4c11"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\inventory-check\\route.ts": {
+    "mtime": 1780741213.9376485,
+    "ast_hash": "c14dbd7839120e0a266fc0d802d0d881",
+    "semantic_hash": "c14dbd7839120e0a266fc0d802d0d881"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\notion\\route.ts": {
+    "mtime": 1780636637.7088935,
+    "ast_hash": "9177a0cd604dc208e71243ffd8006abb",
+    "semantic_hash": "9177a0cd604dc208e71243ffd8006abb"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\pipeline\\events\\route.ts": {
+    "mtime": 1780675708.8910022,
+    "ast_hash": "cb003376192f8362bb843db93455b769",
+    "semantic_hash": "cb003376192f8362bb843db93455b769"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\predict\\predict.test.ts": {
+    "mtime": 1780723618.0996099,
+    "ast_hash": "93bf2e945cd5a12af19307456c748d24",
+    "semantic_hash": "93bf2e945cd5a12af19307456c748d24"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\predict\\route.ts": {
+    "mtime": 1780718980.5998838,
+    "ast_hash": "5e31a0638f8d0baaba4f564818718d64",
+    "semantic_hash": "5e31a0638f8d0baaba4f564818718d64"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\report\\route.ts": {
+    "mtime": 1780803462.4388983,
+    "ast_hash": "50974868b05596c5cedf8f678d8cffec",
+    "semantic_hash": "50974868b05596c5cedf8f678d8cffec"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\search\\route.ts": {
+    "mtime": 1780832890.1660283,
+    "ast_hash": "1e87299c9600725390a78646c4fe22bd",
+    "semantic_hash": "1e87299c9600725390a78646c4fe22bd"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\verify\\route.ts": {
+    "mtime": 1780741213.9376485,
+    "ast_hash": "65b832432b29e16038b649c95752a722",
+    "semantic_hash": "65b832432b29e16038b649c95752a722"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\vision\\route.test.ts": {
+    "mtime": 1780723612.6815603,
+    "ast_hash": "fe8506eeb9d507bd8d5b0fabccbf93aa",
+    "semantic_hash": "fe8506eeb9d507bd8d5b0fabccbf93aa"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\api\\vision\\route.ts": {
+    "mtime": 1780741213.9386475,
+    "ast_hash": "e0c685fb9b3d1d37f433185d32f9673f",
+    "semantic_hash": "e0c685fb9b3d1d37f433185d32f9673f"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\inventory\\page.tsx": {
+    "mtime": 1780636905.091454,
+    "ast_hash": "812ee072998e0204cefd1af98f8713c4",
+    "semantic_hash": "812ee072998e0204cefd1af98f8713c4"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\layout.tsx": {
+    "mtime": 1780671246.9161305,
+    "ast_hash": "52edc8b294ffced47e79f6da4be29010",
+    "semantic_hash": "52edc8b294ffced47e79f6da4be29010"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\page.test.ts": {
+    "mtime": 1780674077.8760042,
+    "ast_hash": "73c36c2fa5f0975aee213a5a07785c42",
+    "semantic_hash": "73c36c2fa5f0975aee213a5a07785c42"
+  },
+  "D:\\dev\\inventory-scanner\\src\\app\\page.tsx": {
+    "mtime": 1780723497.6529572,
+    "ast_hash": "b91b19b0063442fc64205a1614779a54",
+    "semantic_hash": "b91b19b0063442fc64205a1614779a54"
+  },
+  "D:\\dev\\inventory-scanner\\src\\components\\CameraOverlay.test.ts": {
+    "mtime": 1780671612.6346247,
+    "ast_hash": "f7ee027b108fc1c37aab7ae55d1263d6",
+    "semantic_hash": "f7ee027b108fc1c37aab7ae55d1263d6"
+  },
+  "D:\\dev\\inventory-scanner\\src\\components\\CameraOverlay.tsx": {
+    "mtime": 1780671782.9012399,
+    "ast_hash": "b6933ee1605fae9e56b4b4b6f4c2dcb4",
+    "semantic_hash": "b6933ee1605fae9e56b4b4b6f4c2dcb4"
+  },
+  "D:\\dev\\inventory-scanner\\src\\components\\ChatBubble.test.ts": {
+    "mtime": 1780723648.1681597,
+    "ast_hash": "05585751c242c31c8089f72af06cb494",
+    "semantic_hash": "05585751c242c31c8089f72af06cb494"
+  },
+  "D:\\dev\\inventory-scanner\\src\\components\\ChatBubble.tsx": {
+    "mtime": 1780675907.1152842,
+    "ast_hash": "2b488b4e5173892ca9216c9c1cb1159b",
+    "semantic_hash": "2b488b4e5173892ca9216c9c1cb1159b"
+  },
+  "D:\\dev\\inventory-scanner\\src\\components\\CommandBar.test.ts": {
+    "mtime": 1780671644.3457956,
+    "ast_hash": "030c1054ee7ef31f41757e2d17cd5118",
+    "semantic_hash": "030c1054ee7ef31f41757e2d17cd5118"
+  },
+  "D:\\dev\\inventory-scanner\\src\\components\\CommandBar.tsx": {
+    "mtime": 1780671675.562746,
+    "ast_hash": "1911b94c85d66198d215992aec3d622f",
+    "semantic_hash": "1911b94c85d66198d215992aec3d622f"
+  },
+  "D:\\dev\\inventory-scanner\\src\\components\\ReportCard.test.ts": {
+    "mtime": 1780671552.922118,
+    "ast_hash": "e1e49f2c5342cc537e3e17a6f0517cc8",
+    "semantic_hash": "e1e49f2c5342cc537e3e17a6f0517cc8"
+  },
+  "D:\\dev\\inventory-scanner\\src\\components\\ReportCard.tsx": {
+    "mtime": 1780671579.0861948,
+    "ast_hash": "631938ee92df4368488c491d55d3a26d",
+    "semantic_hash": "631938ee92df4368488c491d55d3a26d"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\extract-regex.test.ts": {
+    "mtime": 1780803805.498038,
+    "ast_hash": "97f57613c8715fa6f5d8886adccdb722",
+    "semantic_hash": "97f57613c8715fa6f5d8886adccdb722"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\extract-regex.ts": {
+    "mtime": 1780805401.2284887,
+    "ast_hash": "59b49307977b596b14b609f8c768123a",
+    "semantic_hash": "59b49307977b596b14b609f8c768123a"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\firecrawl.test.ts": {
+    "mtime": 1780803677.1423707,
+    "ast_hash": "a8cb8e35710012178f19981317341d02",
+    "semantic_hash": "a8cb8e35710012178f19981317341d02"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\firecrawl.ts": {
+    "mtime": 1780815810.3461192,
+    "ast_hash": "31ecee58be6dd45eab77e13149931d3c",
+    "semantic_hash": "31ecee58be6dd45eab77e13149931d3c"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\gemini-images.test.ts": {
+    "mtime": 1780667544.828037,
+    "ast_hash": "12ba496a5e2e74d63857c319a975ca17",
+    "semantic_hash": "12ba496a5e2e74d63857c319a975ca17"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\gemini-images.ts": {
+    "mtime": 1780742270.0319748,
+    "ast_hash": "f9d2ab6b378245588e7cb45682d8d66a",
+    "semantic_hash": "f9d2ab6b378245588e7cb45682d8d66a"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\image-pipeline.test.ts": {
+    "mtime": 1780815672.857239,
+    "ast_hash": "42be840821bbcb00b4ddd866c30c285f",
+    "semantic_hash": "42be840821bbcb00b4ddd866c30c285f"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\image-pipeline.ts": {
+    "mtime": 1780815653.492743,
+    "ast_hash": "3c988bb84e7593e6bffa31a1faeed5ea",
+    "semantic_hash": "3c988bb84e7593e6bffa31a1faeed5ea"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\inference.test.ts": {
+    "mtime": 1780639981.8850462,
+    "ast_hash": "be45ed75eb37e9e89d287930dca1d778",
+    "semantic_hash": "be45ed75eb37e9e89d287930dca1d778"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\inference.ts": {
+    "mtime": 1780741214.0895462,
+    "ast_hash": "5be760c4155b928c02531b0196ee1280",
+    "semantic_hash": "5be760c4155b928c02531b0196ee1280"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\itemId.test.ts": {
+    "mtime": 1780635806.9698129,
+    "ast_hash": "7aa5dcd55ebd9299aeb56adeffdc3e06",
+    "semantic_hash": "7aa5dcd55ebd9299aeb56adeffdc3e06"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\itemId.ts": {
+    "mtime": 1780635812.7517495,
+    "ast_hash": "c86ae3e357b343c9cab275baa8476918",
+    "semantic_hash": "c86ae3e357b343c9cab275baa8476918"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\jina.test.ts": {
+    "mtime": 1780805403.7795057,
+    "ast_hash": "701881b0eaa155b0eb6e24029f6426a3",
+    "semantic_hash": "701881b0eaa155b0eb6e24029f6426a3"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\jina.ts": {
+    "mtime": 1780815641.7208264,
+    "ast_hash": "4b3d11065a09b4d4d623c60fb3d8bc44",
+    "semantic_hash": "4b3d11065a09b4d4d623c60fb3d8bc44"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\notion.test.ts": {
+    "mtime": 1780636508.3181057,
+    "ast_hash": "1d35879e9864a534210ec6b93b095395",
+    "semantic_hash": "1d35879e9864a534210ec6b93b095395"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\notion.ts": {
+    "mtime": 1780721459.8949263,
+    "ast_hash": "7038c92e653ed06c14bc2392ea0eaf63",
+    "semantic_hash": "7038c92e653ed06c14bc2392ea0eaf63"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\pipeline-bus.test.ts": {
+    "mtime": 1780817389.951285,
+    "ast_hash": "3d7599b9ace50831b0da73d26328a8d9",
+    "semantic_hash": "3d7599b9ace50831b0da73d26328a8d9"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\pipeline-bus.ts": {
+    "mtime": 1780817345.444245,
+    "ast_hash": "cde5ef050bfe04750e3914ab4f8624ae",
+    "semantic_hash": "cde5ef050bfe04750e3914ab4f8624ae"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\redis.ts": {
+    "mtime": 1780675677.2848425,
+    "ast_hash": "49022c156a4e196f28755df1ed293b7d",
+    "semantic_hash": "49022c156a4e196f28755df1ed293b7d"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\screenshot.ts": {
+    "mtime": 1780803432.6481326,
+    "ast_hash": "63bf3be7003cf6f5da3b7ab1409ca7f9",
+    "semantic_hash": "63bf3be7003cf6f5da3b7ab1409ca7f9"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\serpapi.ts": {
+    "mtime": 1780803363.8841963,
+    "ast_hash": "c66c1e0980b7cc90deea5a9d6245491f",
+    "semantic_hash": "c66c1e0980b7cc90deea5a9d6245491f"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\serper.test.ts": {
+    "mtime": 1780803810.3497405,
+    "ast_hash": "3fd19f1fa6d711090d776beedc85b98a",
+    "semantic_hash": "3fd19f1fa6d711090d776beedc85b98a"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\serper.ts": {
+    "mtime": 1780803298.8140996,
+    "ast_hash": "d5003e7f513ed3fb597c0db7c390963e",
+    "semantic_hash": "d5003e7f513ed3fb597c0db7c390963e"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\tavily.ts": {
+    "mtime": 1780805175.7502828,
+    "ast_hash": "be24369caea82fc0ee366beb4b7a5530",
+    "semantic_hash": "be24369caea82fc0ee366beb4b7a5530"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\url-filter.ts": {
+    "mtime": 1780804721.6899,
+    "ast_hash": "47127fdd5e56ff51d2c3e8c9b99c0c76",
+    "semantic_hash": "47127fdd5e56ff51d2c3e8c9b99c0c76"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\verify-gate.test.ts": {
+    "mtime": 1780803811.0910738,
+    "ast_hash": "6dea33bf85550bacb7a293da5bed40b3",
+    "semantic_hash": "6dea33bf85550bacb7a293da5bed40b3"
+  },
+  "D:\\dev\\inventory-scanner\\src\\lib\\verify-gate.ts": {
+    "mtime": 1780803435.2288995,
+    "ast_hash": "452ac744b6ca2c5bb1c362059ce5eb34",
+    "semantic_hash": "452ac744b6ca2c5bb1c362059ce5eb34"
+  },
+  "D:\\dev\\inventory-scanner\\src\\prompt\\inventory-check.ts": {
+    "mtime": 1780724109.1456368,
+    "ast_hash": "555b020712df19c40477e0c2e7fc3be7",
+    "semantic_hash": "555b020712df19c40477e0c2e7fc3be7"
+  },
+  "D:\\dev\\inventory-scanner\\src\\prompt\\predict.ts": {
+    "mtime": 1780718287.7315812,
+    "ast_hash": "afeaee839e75ed43f8ced6f24d0be231",
+    "semantic_hash": "afeaee839e75ed43f8ced6f24d0be231"
+  },
+  "D:\\dev\\inventory-scanner\\src\\prompt\\search-query.ts": {
+    "mtime": 1780758431.8623326,
+    "ast_hash": "b4bab87823285cfd98a1b83f5fb56aed",
+    "semantic_hash": "b4bab87823285cfd98a1b83f5fb56aed"
+  },
+  "D:\\dev\\inventory-scanner\\src\\prompt\\search-sufficiency.ts": {
+    "mtime": 1780721379.877565,
+    "ast_hash": "bb8367fd4ad4d7dfa49b0c0adc829301",
+    "semantic_hash": "bb8367fd4ad4d7dfa49b0c0adc829301"
+  },
+  "D:\\dev\\inventory-scanner\\src\\prompt\\verify-cp1.ts": {
+    "mtime": 1780718380.451055,
+    "ast_hash": "a36b0ed732b721b44866730f5a2ec283",
+    "semantic_hash": "a36b0ed732b721b44866730f5a2ec283"
+  },
+  "D:\\dev\\inventory-scanner\\src\\prompt\\verify-cp2.ts": {
+    "mtime": 1780718390.0978825,
+    "ast_hash": "d1f7dfe0e8259559f867c2c2aa241054",
+    "semantic_hash": "d1f7dfe0e8259559f867c2c2aa241054"
+  },
+  "D:\\dev\\inventory-scanner\\src\\prompt\\verify-cp3.ts": {
+    "mtime": 1780718398.8540127,
+    "ast_hash": "ea1201d3c5163ab810bf4d4f95cac5d5",
+    "semantic_hash": "ea1201d3c5163ab810bf4d4f95cac5d5"
+  },
+  "D:\\dev\\inventory-scanner\\src\\prompt\\vision.ts": {
+    "mtime": 1780718275.418338,
+    "ast_hash": "f90cfe66dd1546ecc2bbe800dca24d50",
+    "semantic_hash": "f90cfe66dd1546ecc2bbe800dca24d50"
+  },
+  "D:\\dev\\inventory-scanner\\src\\types\\index.test.ts": {
+    "mtime": 1780635722.5823462,
+    "ast_hash": "01ecb70a0e8a9b52e394bbc113092e58",
+    "semantic_hash": "01ecb70a0e8a9b52e394bbc113092e58"
+  },
+  "D:\\dev\\inventory-scanner\\src\\types\\index.ts": {
+    "mtime": 1780803235.335823,
+    "ast_hash": "ff4381f73a0ccdc1581a27786d0d1a0e",
+    "semantic_hash": "ff4381f73a0ccdc1581a27786d0d1a0e"
+  },
+  "D:\\dev\\inventory-scanner\\tsconfig.json": {
+    "mtime": 1780631814.4744022,
+    "ast_hash": "ee17fd1c97c735e9f3564e3f5251f125",
+    "semantic_hash": "ee17fd1c97c735e9f3564e3f5251f125"
+  },
+  "D:\\dev\\inventory-scanner\\vitest.config.ts": {
+    "mtime": 1780635699.2626376,
+    "ast_hash": "4ad23955cd93046ca857913985dd6638",
+    "semantic_hash": "4ad23955cd93046ca857913985dd6638"
+  },
+  "D:\\dev\\inventory-scanner\\AGENTS.md": {
+    "mtime": 1780631862.5933862,
+    "ast_hash": "9e09241799026ac05be315a2f0b50055",
+    "semantic_hash": "9e09241799026ac05be315a2f0b50055"
+  },
+  "D:\\dev\\inventory-scanner\\CLAUDE.md": {
+    "mtime": 1780631862.5933862,
+    "ast_hash": "5c27369b226fcf2be8a6cfe52224e767",
+    "semantic_hash": "5c27369b226fcf2be8a6cfe52224e767"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\00_OVERVIEW.md": {
+    "mtime": 1780632064.9564042,
+    "ast_hash": "1efebe45623fca7e386e08a65698fe8a",
+    "semantic_hash": "1efebe45623fca7e386e08a65698fe8a"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\01_VISION.md": {
+    "mtime": 1780632066.3875885,
+    "ast_hash": "2ad934175d77090c92d1322f30b9286a",
+    "semantic_hash": "2ad934175d77090c92d1322f30b9286a"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\02_PREDICTION.md": {
+    "mtime": 1780632068.4157572,
+    "ast_hash": "4d765d9db942372615bfb5ae4f678fe1",
+    "semantic_hash": "4d765d9db942372615bfb5ae4f678fe1"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\03_SEARCH_LOOP.md": {
+    "mtime": 1780632070.5869625,
+    "ast_hash": "ac74a25b0f11a30818f12367a525bf9d",
+    "semantic_hash": "ac74a25b0f11a30818f12367a525bf9d"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\04_VERIFICATION.md": {
+    "mtime": 1780632072.262432,
+    "ast_hash": "2329dcc32ee74330bf04b9cad760344a",
+    "semantic_hash": "2329dcc32ee74330bf04b9cad760344a"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\05_REPORT.md": {
+    "mtime": 1780632074.0237641,
+    "ast_hash": "6bbbc4212578efa9a6793b615cb493ae",
+    "semantic_hash": "6bbbc4212578efa9a6793b615cb493ae"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\06_NOTION.md": {
+    "mtime": 1780632075.718769,
+    "ast_hash": "21d5de037260b4d93581c5f20ef6dc8d",
+    "semantic_hash": "21d5de037260b4d93581c5f20ef6dc8d"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\07_INFERENCE.md": {
+    "mtime": 1780632085.8955243,
+    "ast_hash": "c22b2fb105f62114f1824462660c7b85",
+    "semantic_hash": "c22b2fb105f62114f1824462660c7b85"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\search_update.md": {
+    "mtime": 1780766277.7949905,
+    "ast_hash": "1ec099601dbc31c4533c66bb6ee2afef",
+    "semantic_hash": "1ec099601dbc31c4533c66bb6ee2afef"
+  },
+  "D:\\dev\\inventory-scanner\\Documents\\search_upgrade.md": {
+    "mtime": 1780802910.4193625,
+    "ast_hash": "d88666f6be3bf9b2d0636f9016191d33",
+    "semantic_hash": "d88666f6be3bf9b2d0636f9016191d33"
+  },
+  "D:\\dev\\inventory-scanner\\README.md": {
+    "mtime": 1780632389.5328605,
+    "ast_hash": "9162add00befbcdb432430f405c4ad8d",
+    "semantic_hash": "9162add00befbcdb432430f405c4ad8d"
+  },
+  "D:\\dev\\inventory-scanner\\docs\\superpowers\\plans\\2026-06-05-image-pipeline.md": {
+    "mtime": 1780667028.5498672,
+    "ast_hash": "2fcf852ccba4ddc4922241bf9eeb6ab9",
+    "semantic_hash": "2fcf852ccba4ddc4922241bf9eeb6ab9"
+  },
+  "D:\\dev\\inventory-scanner\\docs\\superpowers\\plans\\2026-06-05-inventory-scanner.md": {
+    "mtime": 1780634907.0746837,
+    "ast_hash": "ca20628cf2de6c15e5d3008ae086e480",
+    "semantic_hash": "ca20628cf2de6c15e5d3008ae086e480"
+  },
+  "D:\\dev\\inventory-scanner\\docs\\superpowers\\plans\\2026-06-05-ui-redesign.md": {
+    "mtime": 1780671096.8997407,
+    "ast_hash": "1ad1dc10b0d8e4a23e7a21c41000ab2e",
+    "semantic_hash": "1ad1dc10b0d8e4a23e7a21c41000ab2e"
+  },
+  "D:\\dev\\inventory-scanner\\docs\\superpowers\\specs\\2026-06-05-inventory-scanner-design.md": {
+    "mtime": 1780634089.3818886,
+    "ast_hash": "def2f2e964bab436eaf4afdba1ea7c0c",
+    "semantic_hash": "def2f2e964bab436eaf4afdba1ea7c0c"
+  },
+  "D:\\dev\\inventory-scanner\\docs\\superpowers\\specs\\2026-06-05-ui-redesign.md": {
+    "mtime": 1780670564.2666574,
+    "ast_hash": "5b69c4e0b1643dd4046ae9396af1433d",
+    "semantic_hash": "5b69c4e0b1643dd4046ae9396af1433d"
+  },
+  "D:\\dev\\inventory-scanner\\public\\file.svg": {
+    "mtime": 1780587762.7080834,
+    "ast_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71",
+    "semantic_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71"
+  },
+  "D:\\dev\\inventory-scanner\\public\\globe.svg": {
+    "mtime": 1780587762.735641,
+    "ast_hash": "2aaafa6a49b6563925fe440891e32717",
+    "semantic_hash": "2aaafa6a49b6563925fe440891e32717"
+  },
+  "D:\\dev\\inventory-scanner\\public\\next.svg": {
+    "mtime": 1780587762.7596188,
+    "ast_hash": "8e061864f388b47f33a1c3780831193e",
+    "semantic_hash": "8e061864f388b47f33a1c3780831193e"
+  },
+  "D:\\dev\\inventory-scanner\\public\\vercel.svg": {
+    "mtime": 1780587762.7912192,
+    "ast_hash": "c0af2f507b369b085b35ef4bbe3bcf1e",
+    "semantic_hash": "c0af2f507b369b085b35ef4bbe3bcf1e"
+  },
+  "D:\\dev\\inventory-scanner\\public\\window.svg": {
+    "mtime": 1780587762.8119388,
+    "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": "a2760511c65806022ad20adf74370ff3"
+  }
+}
