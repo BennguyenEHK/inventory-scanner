@@ -52,7 +52,6 @@ export function parseShoppingItem(item: SerperShoppingItem): PriceSource | null 
     unit: 'each',
     in_stock: true,
     imageUrl: item.imageUrl ?? undefined,
-    itemDescription: item.title || undefined,  // Serper title = free description, no fetch needed
   }
 }
 

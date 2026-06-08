@@ -19,11 +19,10 @@ function safeHostname(url: string): string {
 function deduplicate(prices: PriceSource[]): PriceSource[] {
   const seen = new Map<string, PriceSource>()
   for (const p of prices) {
-    const hostname = safeHostname(p.url)
-    // Serper Shopping links are often Google redirect/tracking URLs — all share
-    // the same hostname. Use retailer name as the dedup key in that case so
-    // each vendor keeps its own slot instead of all collapsing into one.
-    const key = hostname.includes('google.com') ? p.name.toLowerCase() : hostname
+    // Key by source name (retailer domain from Serper e.g. "accu-components.com").
+    // Serper Shopping links are Google redirect URLs — all share the same hostname —
+    // so URL-based dedup collapses every retailer into one. Source name is correct.
+    const key = p.name.toLowerCase()
     const existing = seen.get(key)
     if (!existing || p.price < existing.price) seen.set(key, p)
   }

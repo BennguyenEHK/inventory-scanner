@@ -540,11 +540,6 @@ async function fillShoppingOne(
   if (missing.length === 0) return src
   if (!isScrapeable(src.url)) return src
 
-  // Google redirect/tracking URLs cannot yield product metadata — price is
-  // already trusted from Serper, so return as-is without any fetch.
-  const srcHostname = (() => { try { return new URL(src.url).hostname } catch { return '' } })()
-  if (srcHostname.includes('google.com')) return src
-
   const content = await jinaFetch(src.url)
   if (!content) return src
 
