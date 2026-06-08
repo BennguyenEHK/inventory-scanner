@@ -19,9 +19,13 @@ function safeHostname(url: string): string {
 function deduplicate(prices: PriceSource[]): PriceSource[] {
   const seen = new Map<string, PriceSource>()
   for (const p of prices) {
-    const domain = safeHostname(p.url)
-    const existing = seen.get(domain)
-    if (!existing || p.price < existing.price) seen.set(domain, p)
+    const hostname = safeHostname(p.url)
+    // Serper Shopping links are often Google redirect/tracking URLs — all share
+    // the same hostname. Use retailer name as the dedup key in that case so
+    // each vendor keeps its own slot instead of all collapsing into one.
+    const key = hostname.includes('google.com') ? p.name.toLowerCase() : hostname
+    const existing = seen.get(key)
+    if (!existing || p.price < existing.price) seen.set(key, p)
   }
   return Array.from(seen.values())
 }
@@ -229,6 +233,7 @@ export async function POST(request: Request): Promise<Response> {
       ctx.lastQueryHint = nextQueryHint
 
       if (sufficient) break
+      if (attempt + 1 >= MAX_ATTEMPTS) break  // safety cap — prevents Vercel timeout on unfindable products
       attempt++
     }
 

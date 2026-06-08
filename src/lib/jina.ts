@@ -540,6 +540,11 @@ async function fillShoppingOne(
   if (missing.length === 0) return src
   if (!isScrapeable(src.url)) return src
 
+  // Google redirect/tracking URLs cannot yield product metadata — price is
+  // already trusted from Serper, so return as-is without any fetch.
+  const srcHostname = (() => { try { return new URL(src.url).hostname } catch { return '' } })()
+  if (srcHostname.includes('google.com')) return src
+
   const content = await jinaFetch(src.url)
   if (!content) return src
 
@@ -578,7 +583,7 @@ export async function fillShoppingMetadata(
   vision?: VisionResult,
   runId?: string,
 ): Promise<PriceSource[]> {
-  const BATCH = 3
+  const BATCH = 5
   const results: PriceSource[] = []
   for (let i = 0; i < sources.length; i += BATCH) {
     const batch = sources.slice(i, i + BATCH)

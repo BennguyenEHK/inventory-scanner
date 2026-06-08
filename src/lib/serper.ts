@@ -86,7 +86,7 @@ async function serperPost<T>(endpoint: string, body: object): Promise<T> {
 
 export async function serperShoppingSearch(query: string): Promise<PriceSource[]> {
   if (!query.trim()) return []
-  const data = await serperPost<{ shopping?: SerperShoppingItem[] }>('/shopping', { q: query.trim(), num: 10 })
+  const data = await serperPost<{ shopping?: SerperShoppingItem[] }>('/shopping', { q: query.trim(), num: 5 })
   return (data.shopping ?? []).map(parseShoppingItem).filter((s): s is PriceSource => s !== null)
 }
 
