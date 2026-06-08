@@ -1,6 +1,6 @@
 import { selectProductImages } from '@/lib/image-pipeline'
 import { generateItemId } from '@/lib/itemId'
-import type { VisionResult, PredictionResult, SearchResult, CheckpointResult, InventoryItem, FinalReport, PriceSource } from '@/types'
+import type { VisionResult, PredictionResult, SearchResult, InventoryItem, FinalReport, PriceSource } from '@/types'
 
 function assembleNotes(search: SearchResult, flags: string[]): string {
   const breakdown = search.sources.map(s => `${s.name} $${s.price}`).join(' | ')
@@ -11,18 +11,16 @@ function assembleNotes(search: SearchResult, flags: string[]): string {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const { vision, prediction, search, cp1, cp2 } = await request.json() as {
+    const { vision, prediction, search } = await request.json() as {
       vision: VisionResult
       prediction?: PredictionResult
       search: SearchResult
-      cp1: CheckpointResult
-      cp2: CheckpointResult
     }
 
     const flags: string[] = []
-    if (!cp1.passed) flags.push('⚠️ Low confidence match — recommend recheck')
-    if (cp2.removed_sources && cp2.removed_sources.length > 0)
-      flags.push(`Removed ${cp2.removed_sources.length} contaminated price sources`)
+    if (vision.confidence < 0.65) flags.push('⚠️ Low confidence match — recommend recheck')
+    if (search.contaminated_removed && search.contaminated_removed.length > 0)
+      flags.push(`Removed ${search.contaminated_removed.length} contaminated price sources`)
     if (search.flag) flags.push(search.flag)
     if (prediction) flags.push('Prediction used — black box image, verify product')
 
@@ -55,7 +53,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const images = await selectProductImages(productName, search.sources, vision)
-    const sourceCount = cp2.clean_sources?.length ?? search.sources.length
+    const sourceCount = search.sources.length
 
     const report: FinalReport = {
       report_html: productName,

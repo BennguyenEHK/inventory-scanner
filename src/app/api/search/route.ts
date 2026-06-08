@@ -169,7 +169,7 @@ export async function POST(request: Request): Promise<Response> {
     // Redis cache: skip entire pipeline on hit.
     // Re-search requests MUST bypass the read cache so the exclusion/re-search loop works.
     // Key bumped to v3 to invalidate entries cached under the old re-search-blind logic.
-    const cacheKey = `search:v3:${productName}:${visionCtx?.barcode ?? 'no-barcode'}`
+    const cacheKey = `search:v4:${productName}:${visionCtx?.barcode ?? 'no-barcode'}`
     const isReSearchRequest = incomingContext != null
     const cached = isReSearchRequest ? null : await redis.get<SearchResult>(cacheKey).catch(() => null)
     if (cached) {

@@ -11,14 +11,13 @@ import { busEventToLine } from '@/lib/pipeline-bus'
 import type {
   AppState, ChatEvent, FinalReport, StageStatus,
   VisionResult, RouteDecision, PredictionResult,
-  SearchResult, CheckpointResult, SearchContext, InventoryCheckResult,
+  SearchResult, InventoryCheckResult,
 } from '@/types'
 
 const STAGE_LABELS: Record<number, string> = {
   1: 'Vision Extraction',
   2: 'Prediction',
-  3: 'Price Search',
-  4: 'Verification',
+  3: 'Search & Verify',
   5: 'Report Assembly',
   6: 'Save to Notion',
 }
@@ -252,54 +251,9 @@ export default function ScanPage() {
           : 'None',
       })
 
-      // Stage 4 — Verification (CP1 + CP2 in parallel)
-      setStage(4, 'running', 'Verifying…')
-      let [cp1, cp2] = await Promise.all([
-        post<CheckpointResult>(apiUrl('/api/verify', runId), { checkpoint: 1, vision }),
-        post<CheckpointResult>(apiUrl('/api/verify', runId), { checkpoint: 2, productName, search }),
-      ])
-
-      // Re-search loop: if CP2 found contaminated sources and signals retry (max 1 re-search)
-      if (cp2.re_search_needed && cp2.exclusion_context && search.context_for_retry) {
-        // Merge exclusion context from CP2 + context from search run
-        const mergedContext: SearchContext = {
-          triedQueries:         search.context_for_retry.triedQueries,
-          excludedDomains:      [...cp2.exclusion_context.excludedDomains, ...search.context_for_retry.excludedDomains],
-          contaminationReasons: [...cp2.exclusion_context.contaminationReasons],
-          confirmedSources:     cp2.exclusion_context.confirmedSources,
-          researchAttempt:      search.context_for_retry.researchAttempt,
-        }
-        setStage(3, 'running', `Re-searching — ${cp2.exclusion_context.excludedDomains.length} contaminated domain(s) excluded…`)
-        search = await post<SearchResult>(
-          apiUrl('/api/search', runId),
-          { productName, vision, context: mergedContext }
-        )
-        setStage(3, 'done', `${search.sources.length} sources · avg $${search.avg} (re-searched)`, {
-          Attempts: String(search.attempts),
-          Sources:  search.sources.map(s => `${s.name}: $${s.price} (${s.unit})`).join('\n'),
-          Range:    `$${search.min} – $${search.max}`,
-          Removed:  'N/A — excluded domains filtered',
-        })
-        // Re-run CP2 with the clean results
-        cp2 = await post<CheckpointResult>(
-          apiUrl('/api/verify', runId),
-          { checkpoint: 2, productName, search }
-        )
-      }
-
-      const cp2Clean = cp2.clean_sources?.length ?? search.sources.length
-      setStage(4, 'done', `CP1: ${cp1.passed ? '✓' : '⚠'} · CP2: ${cp2Clean} clean sources`, {
-        'CP1 result':  cp1.passed ? 'Pass ✓' : 'Fail ⚠',
-        'CP1 issues':  (cp1.issues?.length ?? 0) > 0 ? cp1.issues!.join('\n') : 'None',
-        'CP2 kept':    `${cp2Clean} sources`,
-        'CP2 removed': cp2.removed_sources && cp2.removed_sources.length > 0
-          ? cp2.removed_sources.map(s => `${s.name}: ${s.reason}`).join('\n')
-          : 'None',
-      })
-
       // Stage 5 — Report
       setStage(5, 'running', 'Assembling report…')
-      const finalReport = await post<FinalReport>('/api/report', { vision, prediction, search, cp1, cp2 })
+      const finalReport = await post<FinalReport>('/api/report', { vision, prediction, search })
       setStage(5, 'done', finalReport.notion_json.ItemName, {
         Sources: `${finalReport.sourceCount} verified`,
         Flags:   finalReport.flags.length > 0 ? finalReport.flags.join('\n') : 'None',
