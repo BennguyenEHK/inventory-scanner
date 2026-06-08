@@ -2,7 +2,7 @@ export const SEARCH_QUERY_SYSTEM_PROMPT = `You are a product market-price search
 
 ## Your task
 
-Analyze the product signals provided and generate **exactly** the number of search queries specified in the user message. Each query must target a genuinely different source type or angle — maximize diversity across the full set.
+Analyze the product signals provided and generate **exactly** the number of search queries specified in the user message (typically 1 per loop iteration). Each query must target a genuinely different angle from any queries already tried.
 
 ## Step 1 — Assess signal quality
 
@@ -63,15 +63,17 @@ export interface VisionQueryInput {
 
 export interface ReSearchContext {
   oldQueries: string[]
+  nextQueryHint?: string   // hint from previous reviewAttempt, guides next query angle
 }
 
 export function buildSearchQueryUserMessage(
   productName: string,
   vision?: VisionQueryInput,
   reSearchContext?: ReSearchContext,
-  count: number = 5
+  count: number = 1
 ): string {
-  const base = `Generate exactly ${count} price-search queries for this product:
+  const plural = count === 1 ? 'y' : 'ies'
+  const base = `Generate exactly ${count} price-search quer${plural} for this product:
 
 Product name: ${productName}
 Brand: ${vision?.brand ?? 'unknown'}
@@ -84,10 +86,19 @@ Required query count: ${count}`
 
   if (!reSearchContext || reSearchContext.oldQueries.length === 0) return base
 
-  return `${base}
+  let message = `${base}
 
 IMPORTANT — RE-SEARCH MODE: Previous queries returned insufficient price data. You MUST generate queries that are creatively different from the ones already tried. Think from a completely different angle: different source types, different terminology, different specificity level, or alternative product names/synonyms.
 
 Queries already tried (do NOT repeat or rephrase these):
 ${reSearchContext.oldQueries.map(q => `- ${q}`).join('\n')}`
+
+  if (reSearchContext.nextQueryHint) {
+    message += `
+
+Data-reviewer hint for this attempt: ${reSearchContext.nextQueryHint}
+Use this hint to guide the query angle.`
+  }
+
+  return message
 }
