@@ -50,3 +50,14 @@ test('parseShoppingItem imageUrl is undefined when absent', () => {
   expect(r).not.toBeNull()
   expect(r!.imageUrl).toBeUndefined()
 })
+
+test('parseShoppingItem captures title as itemDescription', () => {
+  const r = parseShoppingItem({
+    title: '3M Copper Foil Tape 25mm x 5m',
+    link: 'https://www.google.com/aclk?sa=l&ai=abc',
+    source: 'Bunnings',
+    price: 'AU$14.90',
+  })
+  expect(r).not.toBeNull()
+  expect(r!.itemDescription).toBe('3M Copper Foil Tape 25mm x 5m')
+})
