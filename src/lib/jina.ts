@@ -520,3 +520,74 @@ export async function jinaExtractAll(
 
   return { prices, discardReasons }
 }
+
+// ─── Metadata-only fill for shopping results ─────────────────────────────────
+// Shopping PriceSources already have price/currency from Serper — we only fill
+// manufacturer, itemDescription, in_stock, items_origin via Jina + Qwen gap-fill.
+// Price is NEVER overwritten here.
+
+const SHOPPING_METADATA_FIELDS = ['manufacturer', 'itemDescription', 'in_stock', 'items_origin'] as const
+type ShoppingMetaField = typeof SHOPPING_METADATA_FIELDS[number]
+
+async function fillShoppingOne(
+  src: PriceSource,
+  vision?: VisionResult,
+  runId?: string,
+): Promise<PriceSource | null> {
+  const missing = SHOPPING_METADATA_FIELDS.filter(
+    f => src[f as keyof PriceSource] == null,
+  ) as ShoppingMetaField[]
+  if (missing.length === 0) return src
+  if (!isScrapeable(src.url)) return src
+
+  const content = await jinaFetch(src.url)
+  if (!content) return src
+
+  const patch = await qwenGapFill(missing as string[], src.url, content)
+
+  const filled: PriceSource = {
+    ...src,
+    manufacturer:    patch.manufacturer    ?? src.manufacturer,
+    itemDescription: patch.itemDescription ?? src.itemDescription,
+    in_stock:        patch.in_stock        != null ? patch.in_stock : src.in_stock,
+    items_origin:    patch.items_origin    ?? src.items_origin,
+    // price and currency intentionally NOT patched — Serper is authoritative
+  }
+
+  if (vision) {
+    const gate = applyVerifyGate(filled, vision)
+    if (gate.discard) {
+      await logEvent(runId, {
+        kind: 'extract_output',
+        url: src.url,
+        layer: 'L3',
+        output: `shopping verify-gate discard: mismatch`,
+      })
+      return null
+    }
+    filled.manufacturer_flagged = gate.manufacturerFlag === ManufacturerFlag.Mismatch
+  }
+
+  return filled
+}
+
+/** Fill metadata (manufacturer / itemDescription / in_stock / items_origin) for shopping
+ *  PriceSources using Jina L2 + Qwen L3. Price is never overwritten. */
+export async function fillShoppingMetadata(
+  sources: PriceSource[],
+  vision?: VisionResult,
+  runId?: string,
+): Promise<PriceSource[]> {
+  const BATCH = 3
+  const results: PriceSource[] = []
+  for (let i = 0; i < sources.length; i += BATCH) {
+    const batch = sources.slice(i, i + BATCH)
+    const settled = await Promise.allSettled(
+      batch.map(src => fillShoppingOne(src, vision, runId)),
+    )
+    for (const s of settled) {
+      if (s.status === 'fulfilled' && s.value !== null) results.push(s.value)
+    }
+  }
+  return results
+}

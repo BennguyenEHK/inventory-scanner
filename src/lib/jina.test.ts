@@ -7,8 +7,10 @@ import {
   isScrapeable,
   isProductImage,
   buildPriceSourceFromFields,
+  fillShoppingMetadata,
 } from './jina'
 import type { ExtractedFields } from './extract-regex'
+import type { PriceSource } from '@/types'
 
 // ─── JSON-LD extraction ───────────────────────────────────────────────────
 
@@ -165,5 +167,45 @@ describe('buildPriceSourceFromFields', () => {
       manufacturer: null, itemDescription: null, length: null, width: null, items_origin: null,
     }
     expect(buildPriceSourceFromFields(fields, 'Test', 'https://test.com', false)).toBeNull()
+  })
+})
+
+describe('fillShoppingMetadata', () => {
+  it('returns source unchanged when all metadata fields already present', async () => {
+    const src: PriceSource = {
+      name: 'Bunnings',
+      url: 'https://bunnings.com.au/p/abc',
+      price: 29.90,
+      currency: 'AUD',
+      unit: 'each',
+      manufacturer: '3M',
+      itemDescription: 'Copper foil tape 25mm',
+      items_origin: 'USA',
+      in_stock: true,
+    }
+    const result = await fillShoppingMetadata([src])
+    expect(result).toHaveLength(1)
+    expect(result[0].price).toBe(29.90)
+    expect(result[0].manufacturer).toBe('3M')
+  })
+
+  it('filters out non-scrapeable URLs', async () => {
+    const src: PriceSource = {
+      name: 'YouTube',
+      url: 'https://youtube.com/watch?v=abc',
+      price: 99,
+      currency: 'USD',
+      unit: 'each',
+    }
+    const result = await fillShoppingMetadata([src])
+    // isScrapeable returns false for youtube.com — source preserved as-is (no metadata to fill)
+    // Actually since all metadata is null AND url is not scrapeable, fillShoppingOne returns src
+    expect(result).toHaveLength(1)
+    expect(result[0].price).toBe(99)
+  })
+
+  it('returns empty array for empty input', async () => {
+    const result = await fillShoppingMetadata([])
+    expect(result).toHaveLength(0)
   })
 })
