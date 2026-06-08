@@ -89,9 +89,9 @@ async function reviewAttempt(
   try {
     const raw = await callModel({
       model: 'Qwen/Qwen3.6-35B-A3B:featherless-ai',
-      enable_thinking: false,
+      enable_thinking: true,
       temperature: 0.1,
-      max_tokens: 1024,
+      max_tokens: 4096,
       messages: [
         { role: 'system', content: SEARCH_REVIEW_SYSTEM_PROMPT },
         {
@@ -189,7 +189,7 @@ export async function POST(request: Request): Promise<Response> {
     let attempt = 0
     const allRejected: Array<PriceSource & { reason: string }> = []
 
-    while (attempt < MAX_ATTEMPTS) {
+    while (true) {
       // 1. Generate one query for this attempt, informed by what was tried + last hint
       const query = await planNextQuery(productName, visionCtx, ctx)
       ctx.triedQueries.push(query)
