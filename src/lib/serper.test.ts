@@ -27,3 +27,26 @@ test('parseOrganicItem maps Serper organic result', () => {
   expect(r.title).toBe('Makita DF454')
   expect(r.snippet).toBe('Great drill for $99')
 })
+
+test('parseShoppingItem captures imageUrl when present', () => {
+  const r = parseShoppingItem({
+    title: 'Makita Drill',
+    link: 'https://amazon.com/dp/B001',
+    source: 'Amazon',
+    price: '$149.99',
+    imageUrl: 'https://images.amazon.com/product/B001.jpg',
+  })
+  expect(r).not.toBeNull()
+  expect(r!.imageUrl).toBe('https://images.amazon.com/product/B001.jpg')
+})
+
+test('parseShoppingItem imageUrl is undefined when absent', () => {
+  const r = parseShoppingItem({
+    title: 'Makita Drill',
+    link: 'https://amazon.com/dp/B001',
+    source: 'Amazon',
+    price: '$149.99',
+  })
+  expect(r).not.toBeNull()
+  expect(r!.imageUrl).toBeUndefined()
+})

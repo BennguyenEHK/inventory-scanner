@@ -55,6 +55,7 @@ export interface SearchContext {
   contaminationReasons: string[]   // why each domain was excluded
   confirmedSources: PriceSource[]  // sources CP2 has already approved
   researchAttempt: number          // how many re-search cycles have run (0 = first)
+  lastQueryHint?: string          // hint from reviewAttempt fed to planNextQuery
 }
 
 export interface PriceSource {
@@ -64,6 +65,7 @@ export interface PriceSource {
   currency: string
   unit: string
   in_stock?: boolean
+  imageUrl?: string               // product image from Serper shopping feed
   // v2: expanded extraction fields
   manufacturer?: string
   itemDescription?: string

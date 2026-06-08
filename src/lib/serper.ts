@@ -51,6 +51,7 @@ export function parseShoppingItem(item: SerperShoppingItem): PriceSource | null 
     currency: parsed.currency,
     unit: 'each',
     in_stock: true,
+    imageUrl: item.imageUrl ?? undefined,
   }
 }
 
